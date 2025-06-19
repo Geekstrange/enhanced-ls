@@ -9,7 +9,7 @@
 - 📊 **多列布局**：自动适应终端宽度进行多列显示
 - 🖥️ **详细模式**：使用 `-l` 选项显示表格布局
 - 📏 **CJK字符支持**：正确处理中文、日文、韩文字符的宽度计算
-- 🚀 **轻量高效**：纯 PowerShell 实现，无需外部依赖
+- 🚀 **轻量高效**：Golang实现，无需外部依赖
 
 ## 环境要求
 
@@ -18,21 +18,21 @@
 
 ## 安装
 
-1. 将项目克隆或下载到 PowerShell 模块目录：
+1. 将项目克隆或下载到本地：
    ```powershell
-   git clone https://github.com/Geekstrange/enhanced-ls-for-powershell.git "$env:USERPROFILE\Documents\PowerShell\Modules\enhanced-ls-for-powershell"
+   git clone https://github.com/Geekstrange/enhanced-ls-for-powershell.git 
    ```
 
 2. 在 PowerShell 配置文件 (`$PROFILE`) 中添加以下内容：
    ```powershell
-   # 导入 linux-like-ls 函数
-   . "$env:USERPROFILE\Documents\PowerShell\Modules\enhanced-ls-for-powershell\linux-like-ls.ps1"
-   
    # 移除现有的 ls 别名
    Remove-Item Alias:ls -ErrorAction SilentlyContinue
    
-   # 设置 ls 别名指向我们的函数
-   Set-Alias -Name ls -Value Linux-Like-LS
+   # 设置 ls 别名指向enls.exe
+   function Invoke-Ls {
+       \path\to\enls.exe -c @args  # @args 表示透传所有参数
+   }
+   Set-Alias ls Invoke-Ls
    ```
 
 3. 重新加载配置文件：
@@ -115,26 +115,6 @@ ls [路径] [选项]
    ```
 
    ![ls-S-l](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lssl.png)
-
-## 自定义配置
-
-你可以在脚本中修改以下变量来自定义行为：
-
-```powershell
-# 可执行文件扩展名
-$LinuxLikeLsExecutables = @(".exe", ".bat", ".cmd", ".ps1", ".sh", ".js", ".py", ".rb", ".pl", ".cs", ".vbs")
-
-# 列间距
-$LinuxLikeLsSpaceLength = 2
-
-# 颜色配置
-$LinuxLikeLsColorMap = @{
-    "Directory"    = "$ANSI_ESC[94m" # 蓝色
-    "Executable"   = "$ANSI_ESC[32m" # 绿色
-    "SymbolicLink" = "$ANSI_ESC[96m" # 亮青色
-    "Other"        = $ANSI_RESET     # 默认
-}
-```
 
 ## 许可证
 
