@@ -161,7 +161,6 @@ func getHelpText() string {
         %s
 
 %s[96mOptions:%s
-    %s[32m-1%s      list one file per line.
     %s[32m-f%s      append indicator (one of */@/#/~/%%) to entries.
     %s[32m-f id%s   only show entries of specified type (id: one of */@/#/~/%%)
     %s[32m-c,C%s    color the output.
@@ -185,7 +184,6 @@ func getHelpText() string {
     %s[93m-f @ -c%s Show symbolic links with color
 `,
 		link,
-		"\033", ansiReset,
 		"\033", ansiReset,
 		"\033", ansiReset,
 		"\033", ansiReset,
@@ -297,7 +295,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 	}
 
 	validOptions := map[rune]bool{
-		'f': true, 'c': true, 'l': true, 's': true, 'S': true, 'h': true, '1': true,
+		'f': true, 'c': true, 'l': true, 's': true, 'S': true, 'h': true,
 	}
 
 	i := 0
