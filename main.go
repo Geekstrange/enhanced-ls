@@ -107,7 +107,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls for PowerShell v0.01", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls for PowerShell v0.02", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls-for-powershell")
 
 	return fmt.Sprintf(`
