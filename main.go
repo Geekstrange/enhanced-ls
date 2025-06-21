@@ -13,7 +13,7 @@ import (
 	"golang.org/x/term"
 )
 
-// FileType represents the type of file
+// 文件类型枚举
 type FileType int
 
 const (
@@ -26,71 +26,26 @@ const (
 	FileTypeBackup
 )
 
-// String returns the string representation of FileType
-func (ft FileType) String() string {
-	switch ft {
-	case FileTypeDirectory:
-		return "Directory"
-	case FileTypeExecutable:
-		return "Executable"
-	case FileTypeSymbolicLink:
-		return "SymbolicLink"
-	case FileTypeArchive:
-		return "Archive"
-	case FileTypeMedia:
-		return "Media"
-	case FileTypeBackup:
-		return "Backup"
-	default:
-		return "Other"
-	}
-}
-
-// Configuration and constants
+// 配置文件类型
 var (
-	// Executable file extensions
-	executableExtensions = []string{
-		".exe", ".bat", ".cmd", ".ps1", ".sh",
-		".js", ".py", ".rb", ".pl", ".cs", ".vbs",
-	}
+	executableExtensions = []string{".exe", ".bat", ".cmd", ".ps1", ".sh", ".js", ".py", ".rb", ".pl", ".cs", ".vbs"}
+	archiveExtensions    = []string{".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".cab", ".img", ".iso", ".jar", ".pea", ".rpm", ".tgz", ".z", ".deb", ".arj", ".lzh", ".lzma", ".lzma2", ".war", ".zst", ".part", ".s7z", ".split"}
+	mediaExtensions      = []string{".aac", ".amr", ".caf", ".m3u", ".midi", ".mod", ".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma", ".wav", ".wv", ".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm", ".rmvb", ".swf", ".vob", ".webm", ".wmv", ".ai", ".avage", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut", ".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx", ".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2", ".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm", ".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".tiff", ".wbmp", ".xpm"}
+	backupExtensions     = []string{".bak", ".backup", ".orig", ".old", ".tmp", ".temp", ".swap", ".chklist", ".chk", ".ms", ".diz", ".wbk", ".xlk", ".cdr_", ".nch", ".ftg", ".gid", ".syd"}
 
-	// Archive file extensions
-	archiveExtensions = []string{
-		".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2",
-		".cab", ".img", ".iso", ".jar", ".pea", ".rpm", ".tgz", ".z", ".deb", ".arj", ".lzh",
-		".lzma", ".lzma2", ".war", ".zst", ".part", ".s7z", ".split",
-	}
-
-	// Media file extensions
-	mediaExtensions = []string{
-		// Audio formats
-		".aac", ".amr", ".caf", ".m3u", ".midi", ".mod", ".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma", ".wav", ".wv",
-		// Video formats
-		".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm", ".rmvb", ".swf", ".vob", ".webm", ".wmv",
-		// Image formats
-		".ai", ".avage", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut", ".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx", ".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2", ".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm", ".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".tiff", ".wbmp", ".xpm",
-	}
-
-	// Backup file extensions
-	backupExtensions = []string{
-		".bak", ".backup", ".orig", ".old", ".tmp", ".temp", ".swap",
-		".chklist", ".chk", ".ms", ".diz", ".wbk", ".xlk", ".cdr_",
-		".nch", ".ftg", ".gid", ".syd",
-	}
-
-	// ANSI color codes
+	// ANSI颜色代码
 	ansiReset = "\033[0m"
 	colorMap  = map[FileType]string{
-		FileTypeDirectory:    "\033[94m", // bright blue
-		FileTypeExecutable:   "\033[32m", // green
-		FileTypeSymbolicLink: "\033[96m", // bright cyan
-		FileTypeArchive:      "\033[91m", // red
-		FileTypeMedia:        "\033[95m", // purple
-		FileTypeBackup:       "\033[90m", // gray
-		FileTypeOther:        ansiReset,  // reset
+		FileTypeDirectory:    "\033[94m", // 亮蓝色
+		FileTypeExecutable:   "\033[32m", // 绿色
+		FileTypeSymbolicLink: "\033[96m", // 亮青色
+		FileTypeArchive:      "\033[91m", // 红色
+		FileTypeMedia:        "\033[95m", // 紫色
+		FileTypeBackup:       "\033[90m", // 灰色
+		FileTypeOther:        ansiReset,  // 重置
 	}
 
-	// File type indicators
+	// 文件类型标识符
 	typeIndicators = map[FileType]string{
 		FileTypeDirectory:    "/",
 		FileTypeExecutable:   "*",
@@ -104,7 +59,7 @@ var (
 	spaceLength = 2
 )
 
-// LSArgs holds command line arguments
+// 命令行参数结构
 type LSArgs struct {
 	Path         string
 	LongFormat   bool
@@ -117,7 +72,7 @@ type LSArgs struct {
 	FilterType   string
 }
 
-// addGradient creates a gradient colored text
+// 辅助函数：创建渐变文本
 func addGradient(text string, startRGB, endRGB [3]int) string {
 	if isOutputRedirected() {
 		return text
@@ -126,7 +81,6 @@ func addGradient(text string, startRGB, endRGB [3]int) string {
 	result := ""
 	chars := []rune(text)
 	for i, char := range chars {
-		// Calculate color interpolation
 		ratio := float64(i) / float64(len(chars)-1)
 		if len(chars) == 1 {
 			ratio = 0
@@ -136,13 +90,12 @@ func addGradient(text string, startRGB, endRGB [3]int) string {
 		g := int(float64(startRGB[1]) + (float64(endRGB[1])-float64(startRGB[1]))*ratio)
 		b := int(float64(startRGB[2]) + (float64(endRGB[2])-float64(startRGB[2]))*ratio)
 
-		// Generate ANSI true color sequence
 		result += fmt.Sprintf("\033[38;2;%d;%d;%dm%c", r, g, b, char)
 	}
 	return result + ansiReset
 }
 
-// createHyperlink creates a hyperlink with ANSI escape sequences
+// 辅助函数：创建超链接
 func createHyperlink(text, url string) string {
 	if isOutputRedirected() {
 		return text
@@ -150,7 +103,7 @@ func createHyperlink(text, url string) string {
 	return fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", url, text)
 }
 
-// getHelpText returns the help text
+// 获取帮助文本
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
@@ -207,12 +160,12 @@ func getHelpText() string {
 	)
 }
 
-// isOutputRedirected checks if output is redirected
+// 检查输出是否重定向
 func isOutputRedirected() bool {
 	return !term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-// getStringDisplayWidth calculates display width (CJK characters count as 2)
+// 计算字符串显示宽度（CJK字符计为2宽度）
 func getStringDisplayWidth(s string) int {
 	width := 0
 	for _, r := range s {
@@ -225,15 +178,15 @@ func getStringDisplayWidth(s string) int {
 	return width
 }
 
-// isCJK checks if a rune is a CJK character
+// 检查是否为CJK字符
 func isCJK(r rune) bool {
-	return (r >= 0x4E00 && r <= 0x9FFF) || // CJK Unified Ideographs
-		(r >= 0x3400 && r <= 0x4DBF) || // CJK Extension A
-		(r >= 0x20000 && r <= 0x2A6DF) || // CJK Extension B
-		(r >= 0x2A700 && r <= 0x2B73F) // CJK Extension C
+	return (r >= 0x4E00 && r <= 0x9FFF) || 
+		(r >= 0x3400 && r <= 0x4DBF) || 
+		(r >= 0x20000 && r <= 0x2A6DF) || 
+		(r >= 0x2A700 && r <= 0x2B73F)
 }
 
-// padByWidth pads string to specified display width
+// 按显示宽度填充字符串
 func padByWidth(s string, totalWidth int) string {
 	currentWidth := getStringDisplayWidth(s)
 	padding := totalWidth - currentWidth
@@ -243,42 +196,42 @@ func padByWidth(s string, totalWidth int) string {
 	return s + strings.Repeat(" ", padding)
 }
 
-// getFileType determines the file type based on extension and attributes
+// 获取文件类型（关键修复）
 func getFileType(info fs.FileInfo, path string) FileType {
-	// Check if it's a symbolic link
+	// 优先检测符号链接
 	if info.Mode()&fs.ModeSymlink != 0 {
 		return FileTypeSymbolicLink
 	}
 
-	// Check if it's a directory
+	// 然后检测目录
 	if info.IsDir() {
 		return FileTypeDirectory
 	}
 
 	ext := strings.ToLower(filepath.Ext(info.Name()))
 
-	// Check backup files first
+	// 检测备份文件
 	for _, backupExt := range backupExtensions {
 		if ext == backupExt {
 			return FileTypeBackup
 		}
 	}
 
-	// Check media files
+	// 检测媒体文件
 	for _, mediaExt := range mediaExtensions {
 		if ext == mediaExt {
 			return FileTypeMedia
 		}
 	}
 
-	// Check archive files
+	// 检测归档文件
 	for _, archiveExt := range archiveExtensions {
 		if ext == archiveExt {
 			return FileTypeArchive
 		}
 	}
 
-	// Check executable files
+	// 检测可执行文件
 	for _, execExt := range executableExtensions {
 		if ext == execExt {
 			return FileTypeExecutable
@@ -288,7 +241,7 @@ func getFileType(info fs.FileInfo, path string) FileType {
 	return FileTypeOther
 }
 
-// parseArgs parses command line arguments
+// 解析命令行参数
 func parseArgs(args []string) (*LSArgs, error) {
 	lsArgs := &LSArgs{
 		Path: ".",
@@ -308,7 +261,6 @@ func parseArgs(args []string) (*LSArgs, error) {
 		}
 
 		if strings.HasPrefix(arg, "-") {
-			// Check for invalid options
 			for _, r := range arg[1:] {
 				if !validOptions[r] {
 					lsArgs.ShowHelp = true
@@ -335,7 +287,6 @@ func parseArgs(args []string) (*LSArgs, error) {
 						lsArgs.LongFormat = true
 					case 'f':
 						lsArgs.ShowFileType = true
-						// Check if next argument is a filter type
 						if i < len(args)-1 {
 							next := args[i+1]
 							if matched, _ := regexp.MatchString(`^[/*@#~%]$`, next); matched {
@@ -357,16 +308,16 @@ func parseArgs(args []string) (*LSArgs, error) {
 	return lsArgs, nil
 }
 
-// getTerminalWidth gets the terminal width
+// 获取终端宽度
 func getTerminalWidth() int {
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil {
-		return 80 // default width
+		return 80
 	}
 	return width
 }
 
-// calculateLayout calculates the optimal layout for displaying items
+// 计算显示布局
 func calculateLayout(displayWidths []int, windowWidth int) (rows, cols int, colWidths []int) {
 	if len(displayWidths) == 0 {
 		return 0, 0, nil
@@ -419,7 +370,7 @@ func calculateLayout(displayWidths []int, windowWidth int) (rows, cols int, colW
 	return rows, cols, colWidths
 }
 
-// maxIntSlice returns the maximum value in a slice of integers
+// 辅助函数：切片最大值
 func maxIntSlice(nums []int) int {
 	if len(nums) == 0 {
 		return 0
@@ -433,7 +384,7 @@ func maxIntSlice(nums []int) int {
 	return max
 }
 
-// maxInt returns the maximum of two integers
+// 辅助函数：两数最大值
 func maxInt(a, b int) int {
 	if a > b {
 		return a
@@ -441,7 +392,7 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// minInt returns the minimum of two integers
+// 辅助函数：两数最小值
 func minInt(a, b int) int {
 	if a < b {
 		return a
@@ -449,13 +400,12 @@ func minInt(a, b int) int {
 	return b
 }
 
-// filterItems filters items based on search term and filter type
+// 过滤项目
 func filterItems(items []fs.FileInfo, paths []string, args *LSArgs) ([]fs.FileInfo, []string) {
 	var filteredItems []fs.FileInfo
 	var filteredPaths []string
 
 	for i, item := range items {
-		// Apply search filter
 		if args.SearchTerm != "" {
 			name := item.Name()
 			if args.IgnoreCase {
@@ -469,7 +419,6 @@ func filterItems(items []fs.FileInfo, paths []string, args *LSArgs) ([]fs.FileIn
 			}
 		}
 
-		// Apply type filter
 		if args.FilterType != "" {
 			fileType := getFileType(item, paths[i])
 			typeId := typeIndicators[fileType]
@@ -485,7 +434,7 @@ func filterItems(items []fs.FileInfo, paths []string, args *LSArgs) ([]fs.FileIn
 	return filteredItems, filteredPaths
 }
 
-// displayLongFormat displays items in long table format
+// 长格式显示
 func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 	nameDisplayWidth := 10
 	if len(items) > 0 {
@@ -508,7 +457,6 @@ func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 	timeWidth := 16
 	nameWidth := nameDisplayWidth
 
-	// Build table borders
 	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" + strings.Repeat("─", timeWidth) + "┬" + strings.Repeat("─", nameWidth) + "┐"
 	header := "│" + padByWidth("Mode", modeWidth) + "│" + padByWidth("LastWriteTime", timeWidth) + "│" + padByWidth("Name", nameWidth) + "│"
 	divider := "├" + strings.Repeat("─", modeWidth) + "┼" + strings.Repeat("─", timeWidth) + "┼" + strings.Repeat("─", nameWidth) + "┤"
@@ -532,7 +480,7 @@ func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 		paddingSpaces := maxInt(0, nameWidth-currentWidth)
 
 		var name string
-		if !isOutputRedirected() && args.SetColor && fileType != FileTypeOther {
+		if !isOutputRedirected() && args.SetColor {
 			color := colorMap[fileType]
 			name = color + baseName + ansiReset + strings.Repeat(" ", paddingSpaces)
 		} else {
@@ -545,7 +493,7 @@ func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 	fmt.Println(bottomLine)
 }
 
-// displayItems displays items in column format
+// 显示项目
 func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
 	if len(items) == 0 {
 		fmt.Println("No matching files found")
@@ -564,7 +512,7 @@ func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
 		}
 
 		var displayName string
-		if !isOutputRedirected() && args.SetColor && fileType != FileTypeOther {
+		if !isOutputRedirected() && args.SetColor {
 			color := colorMap[fileType]
 			displayName = color + baseName + ansiReset
 		} else {
@@ -578,13 +526,11 @@ func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
 	windowWidth := getTerminalWidth()
 	rows, _, colWidths := calculateLayout(displayWidths, windowWidth)
 
-	// Create lines array
 	lines := make([][]string, rows)
 	for i := range lines {
 		lines[i] = make([]string, 0)
 	}
 
-	// Fill lines with items (column-wise)
 	for idx := 0; idx < len(displayNames); idx++ {
 		x := idx / rows
 		y := idx % rows
@@ -600,14 +546,13 @@ func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
 		lines[y] = append(lines[y], name)
 	}
 
-	// Print lines
 	space := strings.Repeat(" ", spaceLength)
 	for _, line := range lines {
 		fmt.Println(strings.Join(line, space))
 	}
 }
 
-// main function
+// 主函数
 func main() {
 	args, err := parseArgs(os.Args[1:])
 	if err != nil {
@@ -620,34 +565,31 @@ func main() {
 		return
 	}
 
-	// Read directory
+	// 关键修复：使用Lstat获取符号链接本身属性
+	var items []fs.FileInfo
+	var paths []string
 	entries, err := os.ReadDir(args.Path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error reading directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Convert to FileInfo and collect paths
-	var items []fs.FileInfo
-	var paths []string
 	for _, entry := range entries {
-		info, err := entry.Info()
+		fullPath := filepath.Join(args.Path, entry.Name())
+		info, err := os.Lstat(fullPath) // 使用Lstat而非entry.Info()
 		if err != nil {
 			continue
 		}
 		items = append(items, info)
-		paths = append(paths, filepath.Join(args.Path, entry.Name()))
+		paths = append(paths, fullPath)
 	}
 
-	// Sort items by name
 	sort.Slice(items, func(i, j int) bool {
 		return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
 	})
 
-	// Apply filters
 	items, paths = filterItems(items, paths, args)
 
-	// Display results
 	if args.LongFormat {
 		displayLongFormat(items, paths, args)
 	} else {
