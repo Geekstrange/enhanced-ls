@@ -3,17 +3,16 @@ package main
 import (
 	"fmt"
 	"io/fs"
-	"math"
 	"os"
 	"path/filepath"
-	"regexp"
+	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 
 	"golang.org/x/term"
 )
 
-// 文件类型枚举
 type FileType int
 
 const (
@@ -26,14 +25,12 @@ const (
 	FileTypeBackup
 )
 
-// 配置文件类型
 var (
 	executableExtensions = []string{".exe", ".bat", ".cmd", ".ps1", ".sh", ".js", ".py", ".rb", ".pl", ".cs", ".vbs"}
 	archiveExtensions    = []string{".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".cab", ".img", ".iso", ".jar", ".pea", ".rpm", ".tgz", ".z", ".deb", ".arj", ".lzh", ".lzma", ".lzma2", ".war", ".zst", ".part", ".s7z", ".split"}
 	mediaExtensions      = []string{".aac", ".amr", ".caf", ".m3u", ".midi", ".mod", ".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma", ".wav", ".wv", ".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm", ".rmvb", ".swf", ".vob", ".webm", ".wmv", ".ai", ".avage", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut", ".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx", ".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2", ".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm", ".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".tiff", ".wbmp", ".xpm"}
 	backupExtensions     = []string{".bak", ".backup", ".orig", ".old", ".tmp", ".temp", ".swap", ".chklist", ".chk", ".ms", ".diz", ".wbk", ".xlk", ".cdr_", ".nch", ".ftg", ".gid", ".syd"}
 
-	// ANSI颜色代码
 	ansiReset = "\033[0m"
 	colorMap  = map[FileType]string{
 		FileTypeDirectory:    "\033[94m", // 亮蓝色
@@ -42,10 +39,9 @@ var (
 		FileTypeArchive:      "\033[91m", // 红色
 		FileTypeMedia:        "\033[95m", // 紫色
 		FileTypeBackup:       "\033[90m", // 灰色
-		FileTypeOther:        ansiReset,  // 重置
+		FileTypeOther:        ansiReset,
 	}
 
-	// 文件类型标识符
 	typeIndicators = map[FileType]string{
 		FileTypeDirectory:    "/",
 		FileTypeExecutable:   "*",
@@ -59,7 +55,6 @@ var (
 	spaceLength = 2
 )
 
-// 命令行参数结构
 type LSArgs struct {
 	Path         string
 	LongFormat   bool
@@ -72,7 +67,6 @@ type LSArgs struct {
 	FilterType   string
 }
 
-// 辅助函数：创建渐变文本
 func addGradient(text string, startRGB, endRGB [3]int) string {
 	if isOutputRedirected() {
 		return text
@@ -85,7 +79,7 @@ func addGradient(text string, startRGB, endRGB [3]int) string {
 		if len(chars) == 1 {
 			ratio = 0
 		}
-		
+
 		r := int(float64(startRGB[0]) + (float64(endRGB[0])-float64(startRGB[0]))*ratio)
 		g := int(float64(startRGB[1]) + (float64(endRGB[1])-float64(startRGB[1]))*ratio)
 		b := int(float64(startRGB[2]) + (float64(endRGB[2])-float64(startRGB[2]))*ratio)
@@ -95,7 +89,6 @@ func addGradient(text string, startRGB, endRGB [3]int) string {
 	return result + ansiReset
 }
 
-// 辅助函数：创建超链接
 func createHyperlink(text, url string) string {
 	if isOutputRedirected() {
 		return text
@@ -103,12 +96,11 @@ func createHyperlink(text, url string) string {
 	return fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", url, text)
 }
 
-// 获取帮助文本
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls for PowerShell v0.02", startRGB, endRGB)
-	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls-for-powershell")
+	gradientTitle := addGradient("Linux-like-ls for PowerShell v0.03", startRGB, endRGB)
+	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/linux-like-ls-for-powershell")
 
 	return fmt.Sprintf(`
         %s
@@ -160,12 +152,14 @@ func getHelpText() string {
 	)
 }
 
-// 检查输出是否重定向
 func isOutputRedirected() bool {
-	return !term.IsTerminal(int(os.Stdout.Fd()))
+	fd := int(os.Stdout.Fd())
+	if term.IsTerminal(fd) {
+		return false
+	}
+	return true
 }
 
-// 计算字符串显示宽度（CJK字符计为2宽度）
 func getStringDisplayWidth(s string) int {
 	width := 0
 	for _, r := range s {
@@ -178,15 +172,13 @@ func getStringDisplayWidth(s string) int {
 	return width
 }
 
-// 检查是否为CJK字符
 func isCJK(r rune) bool {
-	return (r >= 0x4E00 && r <= 0x9FFF) || 
-		(r >= 0x3400 && r <= 0x4DBF) || 
-		(r >= 0x20000 && r <= 0x2A6DF) || 
+	return (r >= 0x4E00 && r <= 0x9FFF) ||
+		(r >= 0x3400 && r <= 0x4DBF) ||
+		(r >= 0x20000 && r <= 0x2A6DF) ||
 		(r >= 0x2A700 && r <= 0x2B73F)
 }
 
-// 按显示宽度填充字符串
 func padByWidth(s string, totalWidth int) string {
 	currentWidth := getStringDisplayWidth(s)
 	padding := totalWidth - currentWidth
@@ -196,42 +188,36 @@ func padByWidth(s string, totalWidth int) string {
 	return s + strings.Repeat(" ", padding)
 }
 
-// 获取文件类型（关键修复）
 func getFileType(info fs.FileInfo, path string) FileType {
 	// 优先检测符号链接
-	if info.Mode()&fs.ModeSymlink != 0 {
+	if isReparsePoint(info) {
 		return FileTypeSymbolicLink
 	}
 
-	// 然后检测目录
 	if info.IsDir() {
 		return FileTypeDirectory
 	}
 
 	ext := strings.ToLower(filepath.Ext(info.Name()))
 
-	// 检测备份文件
 	for _, backupExt := range backupExtensions {
 		if ext == backupExt {
 			return FileTypeBackup
 		}
 	}
 
-	// 检测媒体文件
 	for _, mediaExt := range mediaExtensions {
 		if ext == mediaExt {
 			return FileTypeMedia
 		}
 	}
 
-	// 检测归档文件
 	for _, archiveExt := range archiveExtensions {
 		if ext == archiveExt {
 			return FileTypeArchive
 		}
 	}
 
-	// 检测可执行文件
 	for _, execExt := range executableExtensions {
 		if ext == execExt {
 			return FileTypeExecutable
@@ -241,15 +227,24 @@ func getFileType(info fs.FileInfo, path string) FileType {
 	return FileTypeOther
 }
 
-// 解析命令行参数
+func isReparsePoint(info fs.FileInfo) bool {
+	if runtime.GOOS != "windows" {
+		return info.Mode()&os.ModeSymlink != 0
+	}
+
+	// Windows系统检测重解析点
+	if winFileInfo, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
+		return winFileInfo.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0
+	}
+	return false
+}
+
 func parseArgs(args []string) (*LSArgs, error) {
 	lsArgs := &LSArgs{
 		Path: ".",
 	}
 
-	validOptions := map[rune]bool{
-		'f': true, 'c': true, 'l': true, 's': true, 'S': true, 'h': true,
-	}
+	validOptions := "fclSsSh"
 
 	i := 0
 	for i < len(args) {
@@ -261,40 +256,45 @@ func parseArgs(args []string) (*LSArgs, error) {
 		}
 
 		if strings.HasPrefix(arg, "-") {
-			for _, r := range arg[1:] {
-				if !validOptions[r] {
+			options := arg[1:]
+			if options == "" {
+				return lsArgs, fmt.Errorf("invalid option: %s", arg)
+			}
+
+			for _, r := range options {
+				if !strings.ContainsRune(validOptions, r) {
 					lsArgs.ShowHelp = true
 					return lsArgs, nil
 				}
 			}
 
-			if strings.Contains(arg, "S") {
+			if strings.Contains(options, "S") {
 				i++
 				if i < len(args) {
 					lsArgs.SearchTerm = args[i]
 					lsArgs.StrictCase = true
 				}
-			} else if strings.Contains(arg, "s") {
+			} else if strings.Contains(options, "s") {
 				i++
 				if i < len(args) {
 					lsArgs.SearchTerm = args[i]
 					lsArgs.IgnoreCase = true
 				}
 			} else {
-				for _, r := range strings.ToLower(arg[1:]) {
+				for _, r := range options {
 					switch r {
-					case 'l':
+					case 'l', 'L':
 						lsArgs.LongFormat = true
 					case 'f':
 						lsArgs.ShowFileType = true
 						if i < len(args)-1 {
 							next := args[i+1]
-							if matched, _ := regexp.MatchString(`^[/*@#~%]$`, next); matched {
+							if len(next) == 1 && strings.ContainsAny(next, "/*@#~%") {
 								lsArgs.FilterType = next
 								i++
 							}
 						}
-					case 'c':
+					case 'c', 'C':
 						lsArgs.SetColor = true
 					}
 				}
@@ -308,29 +308,29 @@ func parseArgs(args []string) (*LSArgs, error) {
 	return lsArgs, nil
 }
 
-// 获取终端宽度
 func getTerminalWidth() int {
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil {
+	if err != nil || width <= 0 {
 		return 80
 	}
 	return width
 }
 
-// 计算显示布局
 func calculateLayout(displayWidths []int, windowWidth int) (rows, cols int, colWidths []int) {
 	if len(displayWidths) == 0 {
 		return 0, 0, nil
 	}
 
 	padding := spaceLength
-	rows = len(displayWidths)
 	cols = 1
 	colWidths = []int{maxIntSlice(displayWidths)}
 
 	calcWidth := func(displayWidths []int, padding, cols int) (int, []int) {
 		maxWidths := make([]int, cols)
-		perLines := int(math.Ceil(float64(len(displayWidths)) / float64(cols)))
+		perLines := (len(displayWidths) / cols)
+		if len(displayWidths)%cols != 0 {
+			perLines++
+		}
 
 		for i := 0; i < cols; i++ {
 			startIdx := i * perLines
@@ -366,11 +366,13 @@ func calculateLayout(displayWidths []int, windowWidth int) (rows, cols int, colW
 		cols = nextCols
 	}
 
-	rows = int(math.Ceil(float64(len(displayWidths)) / float64(cols)))
+	rows = (len(displayWidths) / cols)
+	if len(displayWidths)%cols != 0 {
+		rows++
+	}
 	return rows, cols, colWidths
 }
 
-// 辅助函数：切片最大值
 func maxIntSlice(nums []int) int {
 	if len(nums) == 0 {
 		return 0
@@ -384,7 +386,6 @@ func maxIntSlice(nums []int) int {
 	return max
 }
 
-// 辅助函数：两数最大值
 func maxInt(a, b int) int {
 	if a > b {
 		return a
@@ -392,7 +393,6 @@ func maxInt(a, b int) int {
 	return b
 }
 
-// 辅助函数：两数最小值
 func minInt(a, b int) int {
 	if a < b {
 		return a
@@ -400,14 +400,14 @@ func minInt(a, b int) int {
 	return b
 }
 
-// 过滤项目
 func filterItems(items []fs.FileInfo, paths []string, args *LSArgs) ([]fs.FileInfo, []string) {
 	var filteredItems []fs.FileInfo
 	var filteredPaths []string
 
 	for i, item := range items {
+		name := item.Name()
+
 		if args.SearchTerm != "" {
-			name := item.Name()
 			if args.IgnoreCase {
 				if !strings.Contains(strings.ToLower(name), strings.ToLower(args.SearchTerm)) {
 					continue
@@ -434,33 +434,51 @@ func filterItems(items []fs.FileInfo, paths []string, args *LSArgs) ([]fs.FileIn
 	return filteredItems, filteredPaths
 }
 
-// 长格式显示
 func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
-	nameDisplayWidth := 10
-	if len(items) > 0 {
-		maxWidth := 0
-		for i, item := range items {
-			baseName := item.Name()
-			if args.ShowFileType {
-				fileType := getFileType(item, paths[i])
-				baseName += typeIndicators[fileType]
-			}
-			width := getStringDisplayWidth(baseName)
-			if width > maxWidth {
-				maxWidth = width
-			}
+	// 动态计算三列的最大宽度
+	modeWidth := 4    // "Mode"表头长度
+	timeWidth := 16   // 时间格式固定16字符
+	nameWidth := 4    // "Name"表头长度
+
+	for i, item := range items {
+		// 计算Mode列所需宽度
+		modeStr := item.Mode().String()
+		if w := len(modeStr); w > modeWidth {
+			modeWidth = w
 		}
-		nameDisplayWidth = maxInt(maxWidth, 10)
+
+		// 计算Name列所需宽度（含类型指示符）
+		baseName := item.Name()
+		if args.ShowFileType {
+			fileType := getFileType(item, paths[i])
+			baseName += typeIndicators[fileType]
+		}
+		if w := getStringDisplayWidth(baseName); w > nameWidth {
+			nameWidth = w
+		}
 	}
 
-	modeWidth := 10
-	timeWidth := 16
-	nameWidth := nameDisplayWidth
+	// 保障最小宽度（避免表头被截断）
+	modeWidth = maxInt(modeWidth, 4)    // "Mode"最小4
+	timeWidth = maxInt(timeWidth, 16)   // "LastWriteTime"最小16
+	nameWidth = maxInt(nameWidth, 4)     // "Name"最小4
 
-	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" + strings.Repeat("─", timeWidth) + "┬" + strings.Repeat("─", nameWidth) + "┐"
-	header := "│" + padByWidth("Mode", modeWidth) + "│" + padByWidth("LastWriteTime", timeWidth) + "│" + padByWidth("Name", nameWidth) + "│"
-	divider := "├" + strings.Repeat("─", modeWidth) + "┼" + strings.Repeat("─", timeWidth) + "┼" + strings.Repeat("─", nameWidth) + "┤"
-	bottomLine := "└" + strings.Repeat("─", modeWidth) + "┴" + strings.Repeat("─", timeWidth) + "┴" + strings.Repeat("─", nameWidth) + "┘"
+	// 创建表格边框（使用动态计算的宽度）
+	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" + 
+		strings.Repeat("─", timeWidth) + "┬" + 
+		strings.Repeat("─", nameWidth) + "┐"
+	
+	header := "│" + padByWidth("Mode", modeWidth) + "│" + 
+		padByWidth("LastWriteTime", timeWidth) + "│" + 
+		padByWidth("Name", nameWidth) + "│"
+	
+	divider := "├" + strings.Repeat("─", modeWidth) + "┼" + 
+		strings.Repeat("─", timeWidth) + "┼" + 
+		strings.Repeat("─", nameWidth) + "┤"
+	
+	bottomLine := "└" + strings.Repeat("─", modeWidth) + "┴" + 
+		strings.Repeat("─", timeWidth) + "┴" + 
+		strings.Repeat("─", nameWidth) + "┘"
 
 	fmt.Println(topLine)
 	fmt.Println(header)
@@ -493,7 +511,6 @@ func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 	fmt.Println(bottomLine)
 }
 
-// 显示项目
 func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
 	if len(items) == 0 {
 		fmt.Println("No matching files found")
@@ -532,18 +549,20 @@ func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
 	}
 
 	for idx := 0; idx < len(displayNames); idx++ {
-		x := idx / rows
-		y := idx % rows
+		row := idx % rows
+		col := idx / rows
 
-		name := displayNames[idx]
-		if x < len(colWidths) {
-			padding := colWidths[x] - displayWidths[idx]
-			if padding > 0 {
-				name += strings.Repeat(" ", padding)
-			}
+		if col >= len(colWidths) {
+			continue
 		}
 
-		lines[y] = append(lines[y], name)
+		name := displayNames[idx]
+		padding := colWidths[col] - displayWidths[idx]
+		if padding > 0 {
+			name += strings.Repeat(" ", padding)
+		}
+
+		lines[row] = append(lines[row], name)
 	}
 
 	space := strings.Repeat(" ", spaceLength)
@@ -552,7 +571,6 @@ func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
 	}
 }
 
-// 主函数
 func main() {
 	args, err := parseArgs(os.Args[1:])
 	if err != nil {
@@ -565,7 +583,6 @@ func main() {
 		return
 	}
 
-	// 关键修复：使用Lstat获取符号链接本身属性
 	var items []fs.FileInfo
 	var paths []string
 	entries, err := os.ReadDir(args.Path)
@@ -576,7 +593,7 @@ func main() {
 
 	for _, entry := range entries {
 		fullPath := filepath.Join(args.Path, entry.Name())
-		info, err := os.Lstat(fullPath) // 使用Lstat而非entry.Info()
+		info, err := os.Lstat(fullPath)
 		if err != nil {
 			continue
 		}
@@ -584,6 +601,7 @@ func main() {
 		paths = append(paths, fullPath)
 	}
 
+	// 按文件名排序（不区分大小写）
 	sort.Slice(items, func(i, j int) bool {
 		return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
 	})
