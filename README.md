@@ -1,6 +1,6 @@
-# enhanced-ls-for-powershell
+# enhanced-ls
 
-这是一个为 PowerShell 打造的增强版 Linux 风格 “ls” 命令工具，旨在为用户在 PowerShell 环境下提供更丰富、更便捷的文件和文件夹列表查看体验，融合了 Linux “ls” 命令的熟悉风格与实用功能拓展
+这是一个跨平台的增强版“ls” 命令工具，旨在为用户提供更丰富、更便捷的文件和文件夹列表查看体验。
 
 ## 功能特点
 
@@ -20,14 +20,14 @@
 
 1. 将项目克隆或下载到本地：
    ```powershell
-   git clone https://github.com/Geekstrange/enhanced-ls-for-powershell.git 
+   git clone https://github.com/Geekstrange/enhanced-ls.git
    ```
 
 2. 在 PowerShell 配置文件 (`$PROFILE`) 中添加以下内容：
    ```powershell
    # 移除现有的 ls 别名
    Remove-Item Alias:ls -ErrorAction SilentlyContinue
-   
+
    # 设置 ls 别名指向enls.exe
    function Invoke-Ls {
        \path\to\enls.exe -c @args  # @args 表示透传所有参数
@@ -41,6 +41,8 @@
    ```
 
 ## 使用说明
+
+*使用Windows下的PowerShell 7.5+演示*
 
 ### 基本命令
 
@@ -121,6 +123,3 @@ ls [路径] [选项]
 本项目采用 [MIT 许可证](LICENSE)
 
 ---
-
-**让 PowerShell 拥有 Linux 终端的体验！**  
-现在就开始使用 `ls` 命令，享受更直观、更丰富的文件列表体验！
