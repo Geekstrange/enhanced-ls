@@ -98,7 +98,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Linux-like-ls v0.04 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Linux-like-ls v0.05 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/linux-like-ls-for-powershell")
 
 	return fmt.Sprintf(`
@@ -198,7 +198,7 @@ func padByWidth(s string, totalWidth int) string {
 }
 
 func getFileType(info fs.FileInfo, path string) FileType {
-	// 检测符号链接
+	// 优先检测符号链接
 	if isSymbolicLink(info) {
 		return FileTypeSymbolicLink
 	}
@@ -295,7 +295,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 			} else {
 				for _, r := range options {
 					switch r {
-					case 'l', 'L':
+					case 'l':
 						lsArgs.LongFormat = true
 					case 'f':
 						lsArgs.ShowFileType = true
@@ -306,7 +306,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 								i++
 							}
 						}
-					case 'c', 'C':
+					case 'c':
 						lsArgs.SetColor = true
 					}
 				}
