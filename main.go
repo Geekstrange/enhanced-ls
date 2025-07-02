@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-	"syscall"
 
 	"golang.org/x/term"
 )
@@ -99,7 +98,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Linux-like-ls for PowerShell v0.03", startRGB, endRGB)
+	gradientTitle := addGradient("Linux-like-ls v0.04 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/linux-like-ls-for-powershell")
 
 	return fmt.Sprintf(`
@@ -108,8 +107,8 @@ func getHelpText() string {
 %s[96mOptions:%s
     %s[32m-f%s      append indicator (one of */@/#/~/%%) to entries.
     %s[32m-f id%s   only show entries of specified type (id: one of */@/#/~/%%)
-    %s[32m-c,C%s    color the output.
-    %s[32m-l,L%s    display items in a formatted table with borders.
+    %s[32m-c%s      color the output.
+    %s[32m-l%s      display items in a formatted table with borders.
     %s[32m-s%s      search files (case-insensitive).
     %s[32m-S%s      search files (case-sensitive).
     %s[32m-h%s      display this help message.
@@ -126,9 +125,18 @@ func getHelpText() string {
     %s[93m-f%s      Show all files with type indicators
     %s[93m-f #%s    Show only archive files
     %s[93m-f *%s    Show only executables
-    %s[93m-f @ -c%s Show symbolic links with color
+    %s[93m-fc @%s   Show symbolic links with color
+
+%s[96mSupported Platforms:%s
+    %s[93m- Windows (PowerShell 7.5+)%s
+    %s[93m- Linux%s
+    %s[93m- macOS%s
 `,
 		link,
+		"\033", ansiReset,
+		"\033", ansiReset,
+		"\033", ansiReset,
+		"\033", ansiReset,
 		"\033", ansiReset,
 		"\033", ansiReset,
 		"\033", ansiReset,
@@ -153,11 +161,12 @@ func getHelpText() string {
 }
 
 func isOutputRedirected() bool {
-	fd := int(os.Stdout.Fd())
-	if term.IsTerminal(fd) {
-		return false
+	file := os.Stdout
+	stat, err := file.Stat()
+	if err != nil {
+		return true
 	}
-	return true
+	return (stat.Mode() & os.ModeCharDevice) == 0
 }
 
 func getStringDisplayWidth(s string) int {
@@ -189,13 +198,20 @@ func padByWidth(s string, totalWidth int) string {
 }
 
 func getFileType(info fs.FileInfo, path string) FileType {
-	// 优先检测符号链接
-	if isReparsePoint(info) {
+	// 检测符号链接
+	if isSymbolicLink(info) {
 		return FileTypeSymbolicLink
 	}
 
 	if info.IsDir() {
 		return FileTypeDirectory
+	}
+
+	// 在Linux/macOS上检测可执行文件
+	if runtime.GOOS != "windows" {
+		if info.Mode()&0111 != 0 {
+			return FileTypeExecutable
+		}
 	}
 
 	ext := strings.ToLower(filepath.Ext(info.Name()))
@@ -218,25 +234,21 @@ func getFileType(info fs.FileInfo, path string) FileType {
 		}
 	}
 
-	for _, execExt := range executableExtensions {
-		if ext == execExt {
-			return FileTypeExecutable
+	// 在Windows上检测可执行文件
+	if runtime.GOOS == "windows" {
+		for _, execExt := range executableExtensions {
+			if ext == execExt {
+				return FileTypeExecutable
+			}
 		}
 	}
 
 	return FileTypeOther
 }
 
-func isReparsePoint(info fs.FileInfo) bool {
-	if runtime.GOOS != "windows" {
-		return info.Mode()&os.ModeSymlink != 0
-	}
-
-	// Windows系统检测重解析点
-	if winFileInfo, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
-		return winFileInfo.FileAttributes&syscall.FILE_ATTRIBUTE_REPARSE_POINT != 0
-	}
-	return false
+func isSymbolicLink(info fs.FileInfo) bool {
+	// 所有平台通用的符号链接检测方法
+	return info.Mode()&os.ModeSymlink != 0
 }
 
 func parseArgs(args []string) (*LSArgs, error) {
@@ -435,19 +447,19 @@ func filterItems(items []fs.FileInfo, paths []string, args *LSArgs) ([]fs.FileIn
 }
 
 func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
-	// 动态计算三列的最大宽度
-	modeWidth := 4    // "Mode"表头长度
-	timeWidth := 16   // 时间格式固定16字符
-	nameWidth := 4    // "Name"表头长度
+	// 动态计算列的最大宽度
+	modeWidth := 4
+	timeWidth := 16
+	nameWidth := 4
 
 	for i, item := range items {
-		// 计算Mode列所需宽度
+		// Mode 列
 		modeStr := item.Mode().String()
 		if w := len(modeStr); w > modeWidth {
 			modeWidth = w
 		}
 
-		// 计算Name列所需宽度（含类型指示符）
+		// Name 列
 		baseName := item.Name()
 		if args.ShowFileType {
 			fileType := getFileType(item, paths[i])
@@ -458,26 +470,26 @@ func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 		}
 	}
 
-	// 保障最小宽度（避免表头被截断）
-	modeWidth = maxInt(modeWidth, 4)    // "Mode"最小4
-	timeWidth = maxInt(timeWidth, 16)   // "LastWriteTime"最小16
-	nameWidth = maxInt(nameWidth, 4)     // "Name"最小4
+	// 设置最小宽度
+	modeWidth = maxInt(modeWidth, 4)
+	timeWidth = maxInt(timeWidth, 16)
+	nameWidth = maxInt(nameWidth, 4)
 
-	// 创建表格边框（使用动态计算的宽度）
-	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" + 
-		strings.Repeat("─", timeWidth) + "┬" + 
+	// 创建表格边框
+	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" +
+		strings.Repeat("─", timeWidth) + "┬" +
 		strings.Repeat("─", nameWidth) + "┐"
-	
-	header := "│" + padByWidth("Mode", modeWidth) + "│" + 
-		padByWidth("LastWriteTime", timeWidth) + "│" + 
+
+	header := "│" + padByWidth("Mode", modeWidth) + "│" +
+		padByWidth("LastWriteTime", timeWidth) + "│" +
 		padByWidth("Name", nameWidth) + "│"
-	
-	divider := "├" + strings.Repeat("─", modeWidth) + "┼" + 
-		strings.Repeat("─", timeWidth) + "┼" + 
+
+	divider := "├" + strings.Repeat("─", modeWidth) + "┼" +
+		strings.Repeat("─", timeWidth) + "┼" +
 		strings.Repeat("─", nameWidth) + "┤"
-	
-	bottomLine := "└" + strings.Repeat("─", modeWidth) + "┴" + 
-		strings.Repeat("─", timeWidth) + "┴" + 
+
+	bottomLine := "└" + strings.Repeat("─", modeWidth) + "┴" +
+		strings.Repeat("─", timeWidth) + "┴" +
 		strings.Repeat("─", nameWidth) + "┘"
 
 	fmt.Println(topLine)
@@ -486,7 +498,12 @@ func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 
 	for i, item := range items {
 		mode := padByWidth(item.Mode().String(), modeWidth)
-		timeStr := padByWidth(item.ModTime().Format("2006/01/02 15:04"), timeWidth)
+		timeStr := item.ModTime().Format("2006/01/02 15:04")
+		if len(timeStr) > timeWidth {
+			timeStr = timeStr[:timeWidth]
+		} else {
+			timeStr = padByWidth(timeStr, timeWidth)
+		}
 
 		fileType := getFileType(item, paths[i])
 		baseName := item.Name()
@@ -583,6 +600,12 @@ func main() {
 		return
 	}
 
+	// 确保路径格式正确
+	args.Path = filepath.Clean(args.Path)
+	if runtime.GOOS == "windows" {
+		args.Path = strings.ReplaceAll(args.Path, "/", "\\")
+	}
+
 	var items []fs.FileInfo
 	var paths []string
 	entries, err := os.ReadDir(args.Path)
@@ -601,9 +624,12 @@ func main() {
 		paths = append(paths, fullPath)
 	}
 
-	// 按文件名排序（不区分大小写）
+	// 按文件名排序
 	sort.Slice(items, func(i, j int) bool {
-		return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
+		if runtime.GOOS == "windows" {
+			return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
+		}
+		return items[i].Name() < items[j].Name()
 	})
 
 	items, paths = filterItems(items, paths, args)
