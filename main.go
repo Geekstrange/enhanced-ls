@@ -25,7 +25,7 @@ const (
 )
 
 var (
-	executableExtensions = []string{".exe", ".bat", ".cmd", ".ps1", ".sh", ".js", ".py", ".rb", ".pl", ".cs", ".vbs"}
+	executableExtensions = []string{".appx", ".exe", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".msi", ".msix", ".msm", ".msp", ".mst", ".scr", ".app", ".command", ".workflow", ".sh", ".out", ".bin", ".run", ".py", ".rb", ".pl", ".js", ".jar", ".lua", ".ahk", ".ipa", ".apk"}
 	archiveExtensions    = []string{".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".cab", ".img", ".iso", ".jar", ".pea", ".rpm", ".tgz", ".z", ".deb", ".arj", ".lzh", ".lzma", ".lzma2", ".war", ".zst", ".part", ".s7z", ".split"}
 	mediaExtensions      = []string{".aac", ".amr", ".caf", ".m3u", ".midi", ".mod", ".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma", ".wav", ".wv", ".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm", ".rmvb", ".swf", ".vob", ".webm", ".wmv", ".ai", ".avage", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut", ".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx", ".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2", ".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm", ".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".tiff", ".wbmp", ".xpm"}
 	backupExtensions     = []string{".bak", ".backup", ".orig", ".old", ".tmp", ".temp", ".swap", ".chklist", ".chk", ".ms", ".diz", ".wbk", ".xlk", ".cdr_", ".nch", ".ftg", ".gid", ".syd"}
@@ -197,9 +197,16 @@ func padByWidth(s string, totalWidth int) string {
 	return s + strings.Repeat(" ", padding)
 }
 
+// 更可靠的符号链接检测方法
+func isSymbolicLink(path string) bool {
+	// 尝试读取符号链接目标
+	_, err := os.Readlink(path)
+	return err == nil
+}
+
 func getFileType(info fs.FileInfo, path string) FileType {
-	// 优先检测符号链接
-	if isSymbolicLink(info) {
+	// 检测符号链接
+	if isSymbolicLink(path) {
 		return FileTypeSymbolicLink
 	}
 
@@ -244,11 +251,6 @@ func getFileType(info fs.FileInfo, path string) FileType {
 	}
 
 	return FileTypeOther
-}
-
-func isSymbolicLink(info fs.FileInfo) bool {
-	// 所有平台通用的符号链接检测方法
-	return info.Mode()&os.ModeSymlink != 0
 }
 
 func parseArgs(args []string) (*LSArgs, error) {
