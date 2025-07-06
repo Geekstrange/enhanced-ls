@@ -118,7 +118,7 @@ ls [路径] [选项]
 
    ![ls-S-l](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lssl.png)
 
-# 版本选择指南
+## 版本选择指南
 
 根据您的操作系统和架构，请选择对应的安装文件以下是不同平台的版本对应关系：
 
