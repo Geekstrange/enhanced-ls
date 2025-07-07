@@ -55,7 +55,6 @@ var (
 
 	spaceLength = 2
 	currentUser = "user"
-	currentGroup = "group"
 )
 
 type LSArgs struct {
@@ -75,7 +74,6 @@ type FileInfoEx struct {
 	Path      string
 	Links     uint64
 	OwnerName string
-	GroupName string
 }
 
 func addGradient(text string, startRGB, endRGB [3]int) string {
@@ -464,13 +462,8 @@ func filterItems(items []FileInfoEx, args *LSArgs) ([]FileInfoEx, []string) {
 	return filteredItems, filteredPaths
 }
 
-func getOwnerAndGroup() (string, string) {
-	// 尝试获取当前用户信息
-	u, err := user.Current()
-	if err == nil {
-		currentUser = u.Username
-	}
-	return currentUser, currentGroup
+func getOwner() string {
+	return currentUser
 }
 
 func getLinkCount(info fs.FileInfo) uint64 {
@@ -482,17 +475,17 @@ func getLinkCount(info fs.FileInfo) uint64 {
 }
 
 func formatSize(size int64) string {
-	if size < 1024 {
-		return strconv.FormatInt(size, 10)
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d", size)
 	}
-	sizes := []string{"K", "M", "G", "T"}
-	fsize := float64(size)
-	i := 0
-	for fsize >= 1024 && i < len(sizes)-1 {
-		fsize /= 1024
-		i++
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
 	}
-	return fmt.Sprintf("%.1f%s", fsize, sizes[i])
+	return fmt.Sprintf("%.1f%c",
+		float64(size)/float64(div), "KMGTPE"[exp])
 }
 
 func displayLongFormat(items []FileInfoEx, args *LSArgs) {
@@ -504,11 +497,11 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 	modeWidth := 10
 	linksWidth := 6
 	ownerWidth := 9
-	groupWidth := 9
 	sizeWidth := 8
 	timeWidth := 16
 	nameWidth := 12
 
+	// 计算每列的最大宽度
 	for _, item := range items {
 		baseName := item.Name()
 		if args.ShowFileType {
@@ -525,9 +518,6 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 		if w := getStringDisplayWidth(item.OwnerName); w > ownerWidth {
 			ownerWidth = w
 		}
-		if w := getStringDisplayWidth(item.GroupName); w > groupWidth {
-			groupWidth = w
-		}
 		if w := len(formatSize(item.Size())); w > sizeWidth {
 			sizeWidth = w
 		}
@@ -536,10 +526,17 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 		}
 	}
 
+	// 确保最小宽度
+	modeWidth = maxInt(modeWidth, 4)
+	linksWidth = maxInt(linksWidth, 5)
+	ownerWidth = maxInt(ownerWidth, 5)
+	sizeWidth = maxInt(sizeWidth, 4)
+	timeWidth = maxInt(timeWidth, 15)
+	nameWidth = maxInt(nameWidth, 4)
+
 	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" +
 		strings.Repeat("─", linksWidth) + "┬" +
 		strings.Repeat("─", ownerWidth) + "┬" +
-		strings.Repeat("─", groupWidth) + "┬" +
 		strings.Repeat("─", sizeWidth) + "┬" +
 		strings.Repeat("─", timeWidth) + "┬" +
 		strings.Repeat("─", nameWidth) + "┐"
@@ -547,7 +544,6 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 	header := "│" + padByWidth("Mode", modeWidth) + "│" +
 		padByWidth("Links", linksWidth) + "│" +
 		padByWidth("Owner", ownerWidth) + "│" +
-		padByWidth("Group", groupWidth) + "│" +
 		padByWidth("Size", sizeWidth) + "│" +
 		padByWidth("LastWriteTime", timeWidth) + "│" +
 		padByWidth("Name", nameWidth) + "│"
@@ -555,7 +551,6 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 	divider := "├" + strings.Repeat("─", modeWidth) + "┼" +
 		strings.Repeat("─", linksWidth) + "┼" +
 		strings.Repeat("─", ownerWidth) + "┼" +
-		strings.Repeat("─", groupWidth) + "┼" +
 		strings.Repeat("─", sizeWidth) + "┼" +
 		strings.Repeat("─", timeWidth) + "┼" +
 		strings.Repeat("─", nameWidth) + "┤"
@@ -563,7 +558,6 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 	bottomLine := "└" + strings.Repeat("─", modeWidth) + "┴" +
 		strings.Repeat("─", linksWidth) + "┴" +
 		strings.Repeat("─", ownerWidth) + "┴" +
-		strings.Repeat("─", groupWidth) + "┴" +
 		strings.Repeat("─", sizeWidth) + "┴" +
 		strings.Repeat("─", timeWidth) + "┴" +
 		strings.Repeat("─", nameWidth) + "┘"
@@ -576,7 +570,6 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 		mode := padByWidth(item.Mode().String(), modeWidth)
 		links := padLeftByWidth(strconv.FormatUint(item.Links, 10), linksWidth)
 		owner := padByWidth(item.OwnerName, ownerWidth)
-		group := padByWidth(item.GroupName, groupWidth)
 		size := padLeftByWidth(formatSize(item.Size()), sizeWidth)
 
 		timeStr := item.ModTime().Format("2006/01/02 15:04")
@@ -603,7 +596,7 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 			name = baseName + strings.Repeat(" ", paddingSpaces)
 		}
 
-		fmt.Printf("│%s│%s│%s│%s│%s│%s│%s│\n", mode, links, owner, group, size, timeStr, name)
+		fmt.Printf("│%s│%s│%s│%s│%s│%s│\n", mode, links, owner, size, timeStr, name)
 	}
 
 	fmt.Println(bottomLine)
@@ -670,7 +663,7 @@ func displayItems(items []FileInfoEx, args *LSArgs) {
 }
 
 func init() {
-	// 初始化当前用户和组信息
+	// 初始化当前用户信息
 	u, err := user.Current()
 	if err == nil {
 		currentUser = u.Username
@@ -708,7 +701,7 @@ func main() {
 			continue
 		}
 
-		owner, group := currentUser, currentGroup
+		owner := currentUser
 		links := getLinkCount(info)
 
 		items = append(items, FileInfoEx{
@@ -716,7 +709,6 @@ func main() {
 			Path:      fullPath,
 			Links:     links,
 			OwnerName: owner,
-			GroupName: group,
 		})
 	}
 
