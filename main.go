@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"golang.org/x/term"
 )
@@ -25,7 +27,7 @@ const (
 )
 
 var (
-	executableExtensions = []string{".appx", ".exe", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".msi", ".msix", ".msm", ".msp", ".mst", ".scr", ".app", ".command", ".workflow", ".sh", ".out", ".bin", ".run", ".py", ".rb", ".pl", ".js", ".jar", ".lua", ".ahk", ".ipa", ".apk"}
+	executableExtensions = []string{".appx", ".exe", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".msi", ".msix", ".msm", ".msp", ".mst", ".scr", ".app", ".command", ".workflow", ".sh", ".out", ".bin", ".run", ".py", ".pyz", ".rb", ".pl", ".js", ".jar", ".lua", ".whl", ".ahk", ".ipa", ".apk"}
 	archiveExtensions    = []string{".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".cab", ".img", ".iso", ".jar", ".pea", ".rpm", ".tgz", ".z", ".deb", ".arj", ".lzh", ".lzma", ".lzma2", ".war", ".zst", ".part", ".s7z", ".split"}
 	mediaExtensions      = []string{".aac", ".amr", ".caf", ".m3u", ".midi", ".mod", ".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma", ".wav", ".wv", ".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm", ".rmvb", ".swf", ".vob", ".webm", ".wmv", ".ai", ".avage", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut", ".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx", ".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2", ".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm", ".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".tiff", ".wbmp", ".xpm"}
 	backupExtensions     = []string{".bak", ".backup", ".orig", ".old", ".tmp", ".temp", ".swap", ".chklist", ".chk", ".ms", ".diz", ".wbk", ".xlk", ".cdr_", ".nch", ".ftg", ".gid", ".syd"}
@@ -98,7 +100,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.05 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.06 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
 	return fmt.Sprintf(`
@@ -133,30 +135,21 @@ func getHelpText() string {
     %s[93m- macOS%s
 `,
 		link,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
+        "\033", ansiReset,
 	)
 }
 
@@ -448,17 +441,98 @@ func filterItems(items []fs.FileInfo, paths []string, args *LSArgs) ([]fs.FileIn
 	return filteredItems, filteredPaths
 }
 
-func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
-	// 动态计算列的最大宽度
-	modeWidth := 4
-	timeWidth := 16
-	nameWidth := 4
+// 获取文件的详细信息（Unix 系统）
+func getUnixFileDetails(info fs.FileInfo) (owner, group string, size int64, nlink uint64) {
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return "", "", 0, 0
+	}
+	return strconv.Itoa(int(stat.Uid)), strconv.Itoa(int(stat.Gid)), stat.Size, uint64(stat.Nlink)
+}
+
+// 获取文件的详细信息（Windows 系统）
+func getWindowsFileDetails(info fs.FileInfo) (owner, group string, size int64, nlink uint64) {
+	return "", "", info.Size(), 1 // Windows 默认硬链接数为 1
+}
+
+func wrapText(s string, width int) []string {
+	if width <= 0 {
+		return []string{s}
+	}
+
+	var lines []string
+	current := ""
+	currentWidth := 0
+
+	for _, r := range s {
+		charWidth := 1
+		if isCJK(r) {
+			charWidth = 2
+		}
+
+		if currentWidth+charWidth > width && current != "" {
+			lines = append(lines, current)
+			current = ""
+			currentWidth = 0
+		}
+
+		current += string(r)
+		currentWidth += charWidth
+	}
+
+	if current != "" {
+		lines = append(lines, current)
+	}
+
+	return lines
+}
+
+func ifElse(cond bool, a, b string) string {
+	if cond {
+		return a
+	}
+	return b
+}
+
+func renderTableRow(mode, nlink, owner, group, size, time, name string, widths [7]int, color string) []string {
+	nameLines := wrapText(name, widths[6])
+	lines := make([]string, len(nameLines))
+
+	for i := range lines {
+		modeCell := padByWidth(ifElse(i == 0, mode, ""), widths[0])
+		nlinkCell := padByWidth(ifElse(i == 0, nlink, ""), widths[1])
+		ownerCell := padByWidth(ifElse(i == 0, owner, ""), widths[2])
+		groupCell := padByWidth(ifElse(i == 0, group, ""), widths[3])
+		sizeCell := padByWidth(ifElse(i == 0, size, ""), widths[4])
+		timeCell := padByWidth(ifElse(i == 0, time, ""), widths[5])
+		nameCell := padByWidth(nameLines[i], widths[6])
+
+		if color != "" && i == 0 {
+			nameCell = color + nameCell + ansiReset
+		}
+
+		lines[i] = fmt.Sprintf("│%s│%s│%s│%s│%s│%s│%s│",
+			modeCell, nlinkCell, ownerCell, groupCell, sizeCell, timeCell, nameCell)
+	}
+	return lines
+}
+
+func calculateColumnWidths(items []fs.FileInfo, paths []string, args *LSArgs) (modeWidth, timeWidth, nameWidth int) {
+	modeWidth = 4
+	timeWidth = 16
+	nameWidth = 4
 
 	for i, item := range items {
 		// Mode 列
 		modeStr := item.Mode().String()
 		if w := len(modeStr); w > modeWidth {
 			modeWidth = w
+		}
+
+		// Time 列
+		timeStr := item.ModTime().Format("2006/01/02 15:04")
+		if w := len(timeStr); w > timeWidth {
+			timeWidth = w
 		}
 
 		// Name 列
@@ -477,57 +551,92 @@ func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
 	timeWidth = maxInt(timeWidth, 16)
 	nameWidth = maxInt(nameWidth, 4)
 
-	// 创建表格边框
-	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" +
-		strings.Repeat("─", timeWidth) + "┬" +
-		strings.Repeat("─", nameWidth) + "┐"
+	return modeWidth, timeWidth, nameWidth
+}
 
-	header := "│" + padByWidth("Mode", modeWidth) + "│" +
-		padByWidth("LastWriteTime", timeWidth) + "│" +
-		padByWidth("Name", nameWidth) + "│"
+func displayLongFormat(items []fs.FileInfo, paths []string, args *LSArgs) {
+	modeWidth, timeWidth, nameWidth := calculateColumnWidths(items, paths, args)
+	// 新增列：Owner, Group, Size, Nlink
+	ownerWidth := 8
+	groupWidth := 8
+	sizeWidth := 10
+	nlinkWidth := 6
 
-	divider := "├" + strings.Repeat("─", modeWidth) + "┼" +
-		strings.Repeat("─", timeWidth) + "┼" +
-		strings.Repeat("─", nameWidth) + "┤"
+	widths := [7]int{modeWidth, nlinkWidth, ownerWidth, groupWidth, sizeWidth, timeWidth, nameWidth}
 
-	bottomLine := "└" + strings.Repeat("─", modeWidth) + "┴" +
-		strings.Repeat("─", timeWidth) + "┴" +
-		strings.Repeat("─", nameWidth) + "┘"
+	// 表头
+	header := renderTableRow(
+		"Mode", "Links", "Owner", "Group", "Size", "LastWriteTime", "Name",
+		widths, "")
+	divider := "├" + strings.Repeat("─", modeWidth) +
+		"┼" + strings.Repeat("─", nlinkWidth) +
+		"┼" + strings.Repeat("─", ownerWidth) +
+		"┼" + strings.Repeat("─", groupWidth) +
+		"┼" + strings.Repeat("─", sizeWidth) +
+		"┼" + strings.Repeat("─", timeWidth) +
+		"┼" + strings.Repeat("─", nameWidth) + "┤"
 
-	fmt.Println(topLine)
-	fmt.Println(header)
+	fmt.Println("┌" + strings.Repeat("─", modeWidth) +
+		"┬" + strings.Repeat("─", nlinkWidth) +
+		"┬" + strings.Repeat("─", ownerWidth) +
+		"┬" + strings.Repeat("─", groupWidth) +
+		"┬" + strings.Repeat("─", sizeWidth) +
+		"┬" + strings.Repeat("─", timeWidth) +
+		"┬" + strings.Repeat("─", nameWidth) + "┐")
+	for _, line := range header {
+		fmt.Println(line)
+	}
 	fmt.Println(divider)
 
+	// 数据行
 	for i, item := range items {
-		mode := padByWidth(item.Mode().String(), modeWidth)
+		modeStr := item.Mode().String()
 		timeStr := item.ModTime().Format("2006/01/02 15:04")
-		if len(timeStr) > timeWidth {
-			timeStr = timeStr[:timeWidth]
+		fileName := item.Name()
+
+		// 获取文件详细信息
+		var owner, group string
+		var size int64
+		var nlink uint64
+		if runtime.GOOS != "windows" {
+			owner, group, size, nlink = getUnixFileDetails(item)
 		} else {
-			timeStr = padByWidth(timeStr, timeWidth)
+			owner, group, size, nlink = getWindowsFileDetails(item)
 		}
 
-		fileType := getFileType(item, paths[i])
-		baseName := item.Name()
+		// 添加类型指示符
 		if args.ShowFileType {
-			baseName += typeIndicators[fileType]
+			fileType := getFileType(item, paths[i])
+			fileName += typeIndicators[fileType]
 		}
 
-		currentWidth := getStringDisplayWidth(baseName)
-		paddingSpaces := maxInt(0, nameWidth-currentWidth)
-
-		var name string
-		if !isOutputRedirected() && args.SetColor {
-			color := colorMap[fileType]
-			name = color + baseName + ansiReset + strings.Repeat(" ", paddingSpaces)
-		} else {
-			name = baseName + strings.Repeat(" ", paddingSpaces)
+		// 确定颜色
+		color := ""
+		if args.SetColor && term.IsTerminal(int(os.Stdout.Fd())) {
+			color = colorMap[getFileType(item, paths[i])]
 		}
 
-		fmt.Printf("│%s│%s│%s│\n", mode, timeStr, name)
+		// 渲染并输出
+		for _, line := range renderTableRow(
+			modeStr,
+			strconv.FormatUint(nlink, 10),
+			owner,
+			group,
+			strconv.FormatInt(size, 10),
+			timeStr,
+			fileName,
+			widths,
+			color) {
+			fmt.Println(line)
+		}
 	}
-
-	fmt.Println(bottomLine)
+	fmt.Println("└" + strings.Repeat("─", modeWidth) +
+		"┴" + strings.Repeat("─", nlinkWidth) +
+		"┴" + strings.Repeat("─", ownerWidth) +
+		"┴" + strings.Repeat("─", groupWidth) +
+		"┴" + strings.Repeat("─", sizeWidth) +
+		"┴" + strings.Repeat("─", timeWidth) +
+		"┴" + strings.Repeat("─", nameWidth) + "┘")
 }
 
 func displayItems(items []fs.FileInfo, paths []string, args *LSArgs) {
