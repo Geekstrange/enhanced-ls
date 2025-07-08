@@ -128,8 +128,8 @@ ls [路径] [选项]
 |              | ARM64/aarch64         | `enls-vx.x.x-windows_arm64.exe` |
 | **Linux**    | x86_64/AMD64          | `enls-vx.x.x-linux_amd64`       |
 |              | ARM64/aarch64         | `enls-vx.x.x-linux_arm64`       |
-| **macOS**    | Intel (x86_64)        | `enls-vx.x.x-darwin_amd64`      |
-|              | Apple Silicon (ARM64) | `enls-vx.x.x-darwin_arm64`      |
+| **macOS**    | Intel (x86_64/AMD64)        | `enls-vx.x.x-darwin_amd64`      |
+|              | Apple Silicon (ARM64/aarch64) | `enls-vx.x.x-darwin_arm64`      |
 
 ## 如何确定我的系统架构
 
