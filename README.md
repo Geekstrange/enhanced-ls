@@ -125,12 +125,12 @@ ls [路径] [选项]
 | **操作系统** | **架构**              | **文件名**                      |
 | :----------- | :-------------------- | :------------------------------ |
 | **Windows**  | x86_64/AMD64          | `enls-vx.x.x-windows_amd64.exe` |
-|              | ARM64/aarch64         | `enls-vx.x.x-windows_arm64.exe` |
+|              | ARM64/AArch64         | `enls-vx.x.x-windows_arm64.exe` |
 | **Linux**    | x86_64/AMD64          | `enls-vx.x.x-linux_amd64`       |
-|              | ARM64/aarch64         | `enls-vx.x.x-linux_arm64`       |
+|              | ARM64/AArch64         | `enls-vx.x.x-linux_arm64`       |
 |              | LoongArch         | `enls-vx.x.x-linux_loong64`       |
 | **macOS**    | Intel (x86_64/AMD64)        | `enls-vx.x.x-darwin_amd64`      |
-|              | Apple Silicon (ARM64/aarch64) | `enls-vx.x.x-darwin_arm64`      |
+|              | Apple Silicon (ARM64/AArch64) | `enls-vx.x.x-darwin_arm64`      |
 
 ## 如何确定我的系统架构
 
