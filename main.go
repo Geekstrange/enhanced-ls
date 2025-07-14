@@ -172,7 +172,6 @@ func getHelpText() string {
 		"\033", ansiReset,
 		"\033", ansiReset,
 		"\033", ansiReset,
-		"\033", ansiReset,
 	)
 }
 
