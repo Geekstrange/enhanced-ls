@@ -32,8 +32,8 @@ var (
 	mediaExtensions      = []string{".aac", ".amr", ".caf", ".m3u", ".midi", ".mod", ".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma", ".wav", ".wv", ".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm", ".rmvb", ".swf", ".vob", ".webm", ".wmv", ".ai", ".avage", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut", ".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx", ".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2", ".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm", ".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".tiff", ".wbmp", ".xpm"}
 	backupExtensions     = []string{".bak", ".backup", ".orig", ".old", ".tmp", ".temp", ".swap", ".chklist", ".chk", ".ms", ".diz", ".wbk", ".xlk", ".cdr_", ".nch", ".ftg", ".gid", ".syd"}
 
-	ansiReset    = "\033[0m"
-	colorMap     = map[FileType]string{
+	ansiReset = "\033[0m"
+	colorMap  = map[FileType]string{
 		FileTypeDirectory:    "\033[94m", // 亮蓝色
 		FileTypeExecutable:   "\033[32m", // 绿色
 		FileTypeSymbolicLink: "\033[96m", // 亮青色
@@ -67,7 +67,7 @@ type LSArgs struct {
 	IgnoreCase   bool
 	StrictCase   bool
 	FilterType   string
-	Recursive    bool // 新增递归选项
+	Recursive    bool
 }
 
 type FileInfoEx struct {
@@ -109,69 +109,80 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.07 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.08 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
+
+	// 定义颜色变量
+	reset := ansiReset
+	cyan := "\033[96m"
+	green := "\033[32m"
+	blue := "\033[94m"
+	yellow := "\033[93m"
 
 	return fmt.Sprintf(`
         %s
 
-%s[96mOptions:%s
-    %s[32m-f%s        append indicator (one of */@/#~/%%) to entries.
-    %s[32m-f id%s     only show entries of specified type (id: one of */@/#~/%%)
-    %s[32m-c%s        color the output.
-    %s[32m-l%s        display items in a formatted table with borders.
-    %s[32m-r%s        recursively list subdirectories (tree view).
-    %s[32m-s%s        search files (case-insensitive).
-    %s[32m-S%s        search files (case-sensitive).
-    %s[32m-h%s        display this help message.
+%sOptions:%s
+    %s-f%s        append indicator (one of */@/#~/%%) to entries.
+    %s-f id%s     only show entries of specified type (id: one of */@/#~/%%)
+    %s-c%s        color the output.
+    %s-l%s        display items in a formatted table with borders.
+    %s-r%s        recursively list subdirectories (tree view).
+    %s-s%s        search files (case-insensitive).
+    %s-S%s        search files (case-sensitive).
+    %s-h%s        display this help message.
 
-%s[96mFile Type Indicators:%s
-    %s[94m/%s         Directory
-    %s[94m*%s         Executable
-    %s[94m@%s         Symbolic Link
-    %s[94m#%s         Archive (compressed file)
-    %s[94m~%s         Media file (audio/video/image)
-    %s[94m%%%s         Backup/Temporary file
+%sFile Type Indicators:%s
+    %s/%s         Directory
+    %s*%s         Executable
+    %s@%s         Symbolic Link
+    %s#%s         Archive (compressed file)
+    %s~%s         Media file (audio/video/image)
+    %s%%%s         Backup/Temporary file
 
-%s[96mExamples:%s
-    %s[93m-f%s        Show all files with type indicators
-    %s[93m-f #%s      Show only archive files
-    %s[93m-f *%s      Show only executables
-    %s[93m-fc @%s     Show symbolic links with color
-    %s[93m-r%s        Recursive directory listing (tree view)
+%sExamples:%s
+    %s-f%s        Show all files with type indicators
+    %s-f #%s      Show only archive files
+    %s-f *%s      Show only executables
+    %s-fc @%s     Show symbolic links with color
+    %s-r%s        Recursive directory listing (tree view)
+    %s-r -s go%s  Recursive search for "go" (case-insensitive)
+    %s-r -S Go%s  Recursive search for "Go" (case-sensitive)
 
-%s[96mSupported Platforms:%s
-    %s[93m- Windows%s x86_64/ARM64
-    %s[93m- Linux%s   x86_64/ARM64/LoongArch
-    %s[93m- macOS%s   x86_64/ARM64
+%sSupported Platforms:%s
+    %s- Windows%s x86_64/ARM64
+    %s- Linux%s   x86_64/ARM64/LoongArch
+    %s- macOS%s   x86_64/ARM64
 `,
 		link,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
-		"\033", ansiReset,
+		cyan, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		cyan, reset,
+		blue, reset,
+		blue, reset,
+		blue, reset,
+		blue, reset,
+		blue, reset,
+		blue, reset,
+		cyan, reset,
+		yellow, reset,
+		yellow, reset,
+		yellow, reset,
+		yellow, reset,
+		yellow, reset,
+		yellow, reset,
+		yellow, reset,
+		cyan, reset,
+		yellow, reset,
+		yellow, reset,
+		yellow, reset,
 	)
 }
 
@@ -227,20 +238,24 @@ func isSymbolicLink(path string) bool {
 }
 
 func getFileType(info fs.FileInfo, path string) FileType {
+	// 优先检查符号链接
 	if isSymbolicLink(path) {
 		return FileTypeSymbolicLink
 	}
 
+	// 然后检查目录
 	if info.IsDir() {
 		return FileTypeDirectory
 	}
 
+	// 在非Windows系统检查可执行权限
 	if runtime.GOOS != "windows" {
 		if info.Mode()&0111 != 0 {
 			return FileTypeExecutable
 		}
 	}
 
+	// 最后检查文件扩展名
 	ext := strings.ToLower(filepath.Ext(info.Name()))
 
 	for _, backupExt := range backupExtensions {
@@ -261,6 +276,7 @@ func getFileType(info fs.FileInfo, path string) FileType {
 		}
 	}
 
+	// 在Windows系统检查可执行扩展名
 	if runtime.GOOS == "windows" {
 		for _, execExt := range executableExtensions {
 			if ext == execExt {
@@ -277,7 +293,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 		Path: ".",
 	}
 
-	validOptions := "fclrSsSh" // 添加r选项
+	validOptions := "fclrSsSh"
 
 	i := 0
 	for i < len(args) {
@@ -302,16 +318,16 @@ func parseArgs(args []string) (*LSArgs, error) {
 			}
 
 			if strings.Contains(options, "S") {
-				i++
-				if i < len(args) {
+				lsArgs.StrictCase = true
+				if i < len(args)-1 && !strings.HasPrefix(args[i+1], "-") {
+					i++
 					lsArgs.SearchTerm = args[i]
-					lsArgs.StrictCase = true
 				}
 			} else if strings.Contains(options, "s") {
-				i++
-				if i < len(args) {
+				lsArgs.IgnoreCase = true
+				if i < len(args)-1 && !strings.HasPrefix(args[i+1], "-") {
+					i++
 					lsArgs.SearchTerm = args[i]
-					lsArgs.IgnoreCase = true
 				}
 			} else {
 				for _, r := range options {
@@ -320,7 +336,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 						lsArgs.LongFormat = true
 					case 'f':
 						lsArgs.ShowFileType = true
-						if i < len(args)-1 {
+						if i < len(args)-1 && !strings.HasPrefix(args[i+1], "-") {
 							next := args[i+1]
 							if len(next) == 1 && strings.ContainsAny(next, "/*@#~%") {
 								lsArgs.FilterType = next
@@ -329,13 +345,19 @@ func parseArgs(args []string) (*LSArgs, error) {
 						}
 					case 'c':
 						lsArgs.SetColor = true
-					case 'r': // 处理递归选项
+					case 'r':
 						lsArgs.Recursive = true
 					}
 				}
 			}
 		} else {
-			lsArgs.Path = arg
+			// 处理路径参数
+			if lsArgs.Path == "." {
+				lsArgs.Path = arg
+			} else {
+				// 如果有多个路径参数,只取第一个
+				fmt.Fprintf(os.Stderr, "Warning: multiple paths not supported, using first path: %s\n", lsArgs.Path)
+			}
 		}
 		i++
 	}
@@ -435,38 +457,27 @@ func minInt(a, b int) int {
 	return b
 }
 
-func filterItems(items []FileInfoEx, args *LSArgs) ([]FileInfoEx, []string) {
-	var filteredItems []FileInfoEx
-	var filteredPaths []string
-
-	for _, item := range items {
-		name := item.Name()
-
-		if args.SearchTerm != "" {
-			if args.IgnoreCase {
-				if !strings.Contains(strings.ToLower(name), strings.ToLower(args.SearchTerm)) {
-					continue
-				}
-			} else if args.StrictCase {
-				if !strings.Contains(name, args.SearchTerm) {
-					continue
-				}
+func passesFilter(name string, fileType FileType, args *LSArgs) bool {
+	if args.SearchTerm != "" {
+		if args.IgnoreCase {
+			if !strings.Contains(strings.ToLower(name), strings.ToLower(args.SearchTerm)) {
+				return false
+			}
+		} else if args.StrictCase {
+			if !strings.Contains(name, args.SearchTerm) {
+				return false
 			}
 		}
-
-		if args.FilterType != "" {
-			fileType := getFileType(item.FileInfo, item.Path)
-			typeId := typeIndicators[fileType]
-			if typeId != args.FilterType {
-				continue
-			}
-		}
-
-		filteredItems = append(filteredItems, item)
-		filteredPaths = append(filteredPaths, item.Path)
 	}
 
-	return filteredItems, filteredPaths
+	if args.FilterType != "" {
+		typeId := typeIndicators[fileType]
+		if typeId != args.FilterType {
+			return false
+		}
+	}
+
+	return true
 }
 
 func getOwner() string {
@@ -474,7 +485,6 @@ func getOwner() string {
 }
 
 func getLinkCount(info fs.FileInfo) uint64 {
-	// 目录返回2，文件返回1作为占位值
 	if info.IsDir() {
 		return 2
 	}
@@ -669,73 +679,104 @@ func displayItems(items []FileInfoEx, args *LSArgs) {
 	}
 }
 
-// 递归显示目录树
-func displayTree(root string, args *LSArgs) {
-	fmt.Println(root)
-	displayTreeRecursive(root, "", args)
-}
-
-func displayTreeRecursive(path string, prefix string, args *LSArgs) {
-	entries, err := os.ReadDir(path)
+func displayTree(path string, args *LSArgs, level int, prefix string) {
+	info, err := os.Lstat(path)
 	if err != nil {
 		return
 	}
 
-	// 过滤掉隐藏文件（以.开头）
-	var visibleEntries []fs.DirEntry
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Name(), ".") {
-			visibleEntries = append(visibleEntries, entry)
-		}
+	name := info.Name()
+	fileType := getFileType(info, path)
+
+	// 应用过滤条件
+	if !passesFilter(name, fileType, args) {
+		return
 	}
-	entries = visibleEntries
 
-	// 排序条目
-	sort.Slice(entries, func(i, j int) bool {
-		return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
-	})
+	// 添加类型指示器
+	if args.ShowFileType {
+		name += typeIndicators[fileType]
+	}
 
-	for i, entry := range entries {
-		fullPath := filepath.Join(path, entry.Name())
-		info, err := os.Lstat(fullPath)
+	// 应用颜色
+	var displayName string
+	if !isOutputRedirected() && args.SetColor {
+		color := colorMap[fileType]
+		displayName = color + name + ansiReset
+	} else {
+		displayName = name
+	}
+
+	// 打印当前条目
+	if level == 0 {
+		// 根目录
+		fmt.Println(displayName)
+	} else {
+		fmt.Printf("%s%s\n", prefix, displayName)
+	}
+
+	// 如果是目录,递归处理
+	if info.IsDir() {
+		entries, err := os.ReadDir(path)
 		if err != nil {
-			continue
+			return
 		}
 
-		// 确定连接线
-		connector := "├── "
-		if i == len(entries)-1 {
-			connector = "└── "
-		}
-
-		// 获取文件类型
-		fileType := getFileType(info, fullPath)
-		typeIndicator := ""
-		if args.ShowFileType {
-			typeIndicator = typeIndicators[fileType]
-		}
-
-		// 设置颜色
-		var displayName string
-		if !isOutputRedirected() && args.SetColor {
-			color := colorMap[fileType]
-			displayName = color + entry.Name() + typeIndicator + ansiReset
-		} else {
-			displayName = entry.Name() + typeIndicator
-		}
-
-		// 打印当前条目
-		fmt.Printf("%s%s%s\n", prefix, connector, displayName)
-
-		// 如果是目录，递归处理
-		if entry.IsDir() {
-			newPrefix := prefix
-			if i == len(entries)-1 {
-				newPrefix += "    "
-			} else {
-				newPrefix += "│   "
+		// 过滤掉隐藏文件 (以.开头)
+		var visibleEntries []fs.DirEntry
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name(), ".") {
+				visibleEntries = append(visibleEntries, entry)
 			}
-			displayTreeRecursive(fullPath, newPrefix, args)
+		}
+		entries = visibleEntries
+
+		// 排序条目
+		sort.Slice(entries, func(i, j int) bool {
+			return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
+		})
+
+		for i, entry := range entries {
+			fullPath := filepath.Join(path, entry.Name())
+			entryInfo, err := os.Lstat(fullPath)
+			if err != nil {
+				continue
+			}
+
+			childName := entryInfo.Name()
+			childType := getFileType(entryInfo, fullPath)
+
+			// 对子项应用过滤条件
+			if !passesFilter(childName, childType, args) {
+				continue
+			}
+
+			if args.ShowFileType {
+				childName += typeIndicators[childType]
+			}
+
+			var childDisplayName string
+			if !isOutputRedirected() && args.SetColor {
+				color := colorMap[childType]
+				childDisplayName = color + childName + ansiReset
+			} else {
+				childDisplayName = childName
+			}
+
+			// 确定连接线
+			connector := "├── "
+			newPrefix := prefix + "│   "
+			if i == len(entries)-1 {
+				connector = "└── "
+				newPrefix = prefix + "    "
+			}
+
+			fmt.Printf("%s%s%s\n", prefix, connector, childDisplayName)
+
+			// 如果子项是目录,递归处理
+			if entry.IsDir() {
+				displayTree(fullPath, args, level+1, newPrefix)
+			}
 		}
 	}
 }
@@ -772,12 +813,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 如果是递归模式，直接显示目录树
+	// 递归模式处理
 	if args.Recursive {
-		if fileInfo.IsDir() {
-			displayTree(args.Path, args)
-		} else {
-			fmt.Println(args.Path)
+		// 先检查根目录是否满足过滤条件
+		rootName := fileInfo.Name()
+		rootType := getFileType(fileInfo, args.Path)
+		if passesFilter(rootName, rootType, args) {
+			displayTree(args.Path, args, 0, "")
+		} else if fileInfo.IsDir() {
+			// 如果根目录是目录但不满足过滤条件,但需要递归进入查看子项
+			fmt.Println(rootName)
+			displayTreeRecursive(args.Path, "", args)
 		}
 		return
 	}
@@ -820,6 +866,11 @@ func main() {
 			continue
 		}
 
+		fileType := getFileType(info, fullPath)
+		if !passesFilter(entry.Name(), fileType, args) {
+			continue
+		}
+
 		owner := currentUser
 		links := getLinkCount(info)
 
@@ -839,11 +890,76 @@ func main() {
 		return items[i].Name() < items[j].Name()
 	})
 
-	filteredItems, _ := filterItems(items, args)
-
 	if args.LongFormat {
-		displayLongFormat(filteredItems, args)
+		displayLongFormat(items, args)
 	} else {
-		displayItems(filteredItems, args)
+		displayItems(items, args)
+	}
+}
+
+// 专门用于递归显示的函数,确保即使根目录不满足条件也能进入子目录
+func displayTreeRecursive(path string, prefix string, args *LSArgs) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return
+	}
+
+	// 过滤掉隐藏文件 (以.开头)
+	var visibleEntries []fs.DirEntry
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".") {
+			visibleEntries = append(visibleEntries, entry)
+		}
+	}
+	entries = visibleEntries
+
+	// 排序条目
+	sort.Slice(entries, func(i, j int) bool {
+		return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
+	})
+
+	for i, entry := range entries {
+		fullPath := filepath.Join(path, entry.Name())
+		info, err := os.Lstat(fullPath)
+		if err != nil {
+			continue
+		}
+
+		name := info.Name()
+		fileType := getFileType(info, fullPath)
+
+		// 应用过滤条件
+		if !passesFilter(name, fileType, args) {
+			continue
+		}
+
+		// 添加类型指示器
+		if args.ShowFileType {
+			name += typeIndicators[fileType]
+		}
+
+		// 应用颜色
+		var displayName string
+		if !isOutputRedirected() && args.SetColor {
+			color := colorMap[fileType]
+			displayName = color + name + ansiReset
+		} else {
+			displayName = name
+		}
+
+		// 确定连接线
+		connector := "├── "
+		newPrefix := prefix + "│   "
+		if i == len(entries)-1 {
+			connector = "└── "
+			newPrefix = prefix + "    "
+		}
+
+		fmt.Printf("%s%s%s\n", prefix, connector, displayName)
+
+		// 如果是目录,递归处理
+		if entry.IsDir() {
+			displayTreeRecursive(fullPath, newPrefix, args)
+		}
 	}
 }
