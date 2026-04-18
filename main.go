@@ -370,9 +370,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 			hasS := strings.ContainsRune(options, 'S')
 			hass := strings.ContainsRune(options, 's')
 			if hasS && hass {
-				fmt.Fprintln(os.Stderr, "Error: -s (case-insensitive) and -S (case-sensitive) are mutually exclusive")
-				lsArgs.ShowHelp = true
-				return lsArgs, nil
+				return nil, fmt.Errorf("-s (case-insensitive) and -S (case-sensitive) are mutually exclusive")
 			}
 
 			if hasS {
