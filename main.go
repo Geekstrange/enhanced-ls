@@ -312,7 +312,6 @@ func getHelpText() string {
 		green, reset,
 		green, reset,
 		green, reset,
-		green, reset,
 		cyan, reset,
 		blue, reset,
 		blue, reset,
