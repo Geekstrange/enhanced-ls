@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -13,6 +14,10 @@ import (
 
 	"golang.org/x/term"
 )
+
+// ─────────────────────────────────────────────
+// Types & constants
+// ─────────────────────────────────────────────
 
 type FileType int
 
@@ -26,21 +31,64 @@ const (
 	FileTypeBackup
 )
 
+// ValidTypeIndicators is the canonical set of filter characters, derived
+// from the typeIndicators map in init().
+const ValidTypeIndicators = "/*@#~%"
+
 var (
-	executableExtensions = []string{".appx", ".exe", ".com", ".bat", ".cmd", ".ps1", ".vbs", ".msi", ".msix", ".msm", ".msp", ".mst", ".scr", ".app", ".command", ".workflow", ".sh", ".out", ".bin", ".run", ".py", ".rb", ".pl", ".js", ".jar", ".lua", ".ahk", ".ipa", ".apk"}
-	archiveExtensions    = []string{".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2", ".cab", ".img", ".iso", ".jar", ".pea", ".rpm", ".tgz", ".z", ".deb", ".arj", ".lzh", ".lzma", ".lzma2", ".war", ".zst", ".part", ".s7z", ".split"}
-	mediaExtensions      = []string{".aac", ".amr", ".caf", ".m3u", ".midi", ".mod", ".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma", ".wav", ".wv", ".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm", ".rmvb", ".swf", ".vob", ".webm", ".wmv", ".ai", ".avage", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut", ".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx", ".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2", ".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm", ".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".tiff", ".wbmp", ".xpm"}
-	backupExtensions     = []string{".bak", ".backup", ".orig", ".old", ".tmp", ".temp", ".swap", ".chklist", ".chk", ".ms", ".diz", ".wbk", ".xlk", ".cdr_", ".nch", ".ftg", ".gid", ".syd"}
+	executableExtensions = []string{
+		".appx", ".exe", ".com", ".bat", ".cmd", ".ps1", ".vbs",
+		".msi", ".msix", ".msixbundle", ".msm", ".msp", ".mst",
+		".cpl", ".wsf", ".psm1", ".elf", ".bash", ".zsh", ".php",
+		".scr", ".app", ".command", ".workflow", ".ts", ".wasm",
+		".sh", ".out", ".bin", ".run", ".desktop", ".reg", ".ipa",
+		".py", ".rb", ".pl", ".js", ".jar", ".lua", ".ahk",
+		".msc", ".jse", ".vbe", ".scpt", ".pif", ".gadget",
+	}
+	archiveExtensions = []string{
+		".7z", ".zip", ".rar", ".tar", ".gz", ".xz", ".bz2",
+		".cab", ".img", ".iso", ".pea", ".rpm", ".tgz", ".qcow2",
+		".z", ".deb", ".arj", ".lzh", ".lzma", ".lzma2", ".zipx",
+		".war", ".zst", ".part", ".s7z", ".split", ".aar", ".br",
+		".wim", ".esd", ".apk", ".dmg", ".pkg", ".ear", ".lz",
+		".crx", ".xpi", ".cpio", ".lha", ".sitx", ".vmdk",
+	}
+	mediaExtensions = []string{
+		".aac", ".amr", ".caf", ".m3u", ".midi", ".mod",
+		".mp1", ".mp2", ".mp3", ".ogg", ".opus", ".ra", ".wma",
+		".wav", ".wv", ".m4a", ".flac", ".alac", ".aiff", ".ape",
+		".3gp", ".3g2", ".asf", ".avi", ".flv", ".m4v", ".mkv",
+		".mov", ".mp4", ".mpeg", ".mpg", ".mpe", ".mts", ".rm",
+		".rmvb", ".swf", ".vob", ".webm", ".wmv", ".ogv", ".m2ts",
+		".ai", ".art", ".blend", ".cgm", ".cin", ".cur", ".cut",
+		".dcx", ".dng", ".dpx", ".emf", ".fit", ".fits", ".fpx",
+		".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2",
+		".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".raw", ".cr2",
+		".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm",
+		".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif",
+		".tiff", ".wbmp", ".xpm", ".bmp", ".webp", ".avif", ".ico",
+		".heic", ".heif", ".nef", ".arw", ".psb", ".glb", ".gltf",
+	}
+	backupExtensions = []string{
+		".bak", ".backup", ".orig", ".old", ".tmp", ".temp",
+		".swap", ".chklist", ".chk", ".ms", ".diz", ".wbk",
+		".xlk", ".cdr_", ".nch", ".ftg", ".gid", ".syd",
+		".bkp", ".gho", ".vhd", ".vhdx", ".tib", ".log",
+		".sql", ".dump", ".sav", ".dbk", ".rdb",
+	}
+
+	// extTypeMap is built in init() for O(1) extension lookups.
+	extTypeMap map[string]FileType
 
 	ansiReset = "\033[0m"
 	colorMap  = map[FileType]string{
-		FileTypeDirectory:    "\033[94m", // 亮蓝色
-		FileTypeExecutable:   "\033[32m", // 绿色
-		FileTypeSymbolicLink: "\033[96m", // 亮青色
-		FileTypeArchive:      "\033[91m", // 红色
-		FileTypeMedia:        "\033[95m", // 紫色
-		FileTypeBackup:       "\033[90m", // 灰色
-		FileTypeOther:        ansiReset,
+		FileTypeDirectory:    "\033[94m",
+		FileTypeExecutable:   "\033[32m",
+		FileTypeSymbolicLink: "\033[96m",
+		FileTypeArchive:      "\033[91m",
+		FileTypeMedia:        "\033[95m",
+		FileTypeBackup:       "\033[90m",
+		FileTypeOther:        "",
 	}
 
 	typeIndicators = map[FileType]string{
@@ -57,6 +105,40 @@ var (
 	currentUser = "user"
 )
 
+// ─────────────────────────────────────────────
+// init
+// ─────────────────────────────────────────────
+
+func init() {
+	// Resolve current OS user.
+	if u, err := user.Current(); err == nil {
+		currentUser = u.Username
+	}
+
+	// Build extension → FileType map for O(1) lookups.
+	extTypeMap = make(map[string]FileType)
+	for _, e := range backupExtensions {
+		extTypeMap[e] = FileTypeBackup
+	}
+	for _, e := range mediaExtensions {
+		extTypeMap[e] = FileTypeMedia
+	}
+	for _, e := range archiveExtensions {
+		extTypeMap[e] = FileTypeArchive
+	}
+	// Executable extensions are only used on Windows but we store them
+	// unconditionally and gate the lookup at call-time.
+	for _, e := range executableExtensions {
+		if _, exists := extTypeMap[e]; !exists {
+			extTypeMap[e] = FileTypeExecutable
+		}
+	}
+}
+
+// ─────────────────────────────────────────────
+// Argument types
+// ─────────────────────────────────────────────
+
 type LSArgs struct {
 	Path         string
 	LongFormat   bool
@@ -68,6 +150,7 @@ type LSArgs struct {
 	StrictCase   bool
 	FilterType   string
 	Recursive    bool
+	ShowAll      bool // -a: show hidden (dot) files
 }
 
 type FileInfoEx struct {
@@ -77,11 +160,74 @@ type FileInfoEx struct {
 	OwnerName string
 }
 
+// ─────────────────────────────────────────────
+// Terminal / display utilities
+// ─────────────────────────────────────────────
+
+func isOutputRedirected() bool {
+	stat, err := os.Stdout.Stat()
+	if err != nil {
+		return true
+	}
+	return (stat.Mode() & os.ModeCharDevice) == 0
+}
+
+func getTerminalWidth() int {
+	// If output is redirected there is no terminal; use a very large value so
+	// nothing gets truncated by column arithmetic.
+	if isOutputRedirected() {
+		return math.MaxInt
+	}
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil || width <= 0 {
+		return 80
+	}
+	return width
+}
+
+func getStringDisplayWidth(s string) int {
+	width := 0
+	for _, r := range s {
+		if isCJK(r) {
+			width += 2
+		} else {
+			width += 1
+		}
+	}
+	return width
+}
+
+func isCJK(r rune) bool {
+	return (r >= 0x4E00 && r <= 0x9FFF) ||
+		(r >= 0x3400 && r <= 0x4DBF) ||
+		(r >= 0x20000 && r <= 0x2A6DF) ||
+		(r >= 0x2A700 && r <= 0x2B73F)
+}
+
+func padByWidth(s string, totalWidth int) string {
+	padding := totalWidth - getStringDisplayWidth(s)
+	if padding <= 0 {
+		return s
+	}
+	return s + strings.Repeat(" ", padding)
+}
+
+func padLeftByWidth(s string, totalWidth int) string {
+	padding := totalWidth - getStringDisplayWidth(s)
+	if padding <= 0 {
+		return s
+	}
+	return strings.Repeat(" ", padding) + s
+}
+
+// ─────────────────────────────────────────────
+// Hyperlink / gradient helpers (cosmetic)
+// ─────────────────────────────────────────────
+
 func addGradient(text string, startRGB, endRGB [3]int) string {
 	if isOutputRedirected() {
 		return text
 	}
-
 	result := ""
 	chars := []rune(text)
 	for i, char := range chars {
@@ -89,11 +235,9 @@ func addGradient(text string, startRGB, endRGB [3]int) string {
 		if len(chars) == 1 {
 			ratio = 0
 		}
-
 		r := int(float64(startRGB[0]) + (float64(endRGB[0])-float64(startRGB[0]))*ratio)
 		g := int(float64(startRGB[1]) + (float64(endRGB[1])-float64(startRGB[1]))*ratio)
 		b := int(float64(startRGB[2]) + (float64(endRGB[2])-float64(startRGB[2]))*ratio)
-
 		result += fmt.Sprintf("\033[38;2;%d;%d;%dm%c", r, g, b, char)
 	}
 	return result + ansiReset
@@ -106,13 +250,16 @@ func createHyperlink(text, url string) string {
 	return fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", url, text)
 }
 
+// ─────────────────────────────────────────────
+// Help text
+// ─────────────────────────────────────────────
+
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.08 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.0.9 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
-	// 定义颜色变量
 	reset := ansiReset
 	cyan := "\033[96m"
 	green := "\033[32m"
@@ -125,6 +272,7 @@ func getHelpText() string {
 %sOptions:%s
     %s-f%s        append indicator (one of */@/#~/%%) to entries.
     %s-f id%s     only show entries of specified type (id: one of */@/#~/%%)
+    %s-a%s        show hidden files (entries starting with '.').
     %s-c%s        color the output.
     %s-l%s        display items in a formatted table with borders.
     %s-r%s        recursively list subdirectories (tree view).
@@ -164,7 +312,9 @@ func getHelpText() string {
 		green, reset,
 		green, reset,
 		green, reset,
+		green, reset,
 		cyan, reset,
+		blue, reset,
 		blue, reset,
 		blue, reset,
 		blue, reset,
@@ -186,114 +336,14 @@ func getHelpText() string {
 	)
 }
 
-func isOutputRedirected() bool {
-	file := os.Stdout
-	stat, err := file.Stat()
-	if err != nil {
-		return true
-	}
-	return (stat.Mode() & os.ModeCharDevice) == 0
-}
-
-func getStringDisplayWidth(s string) int {
-	width := 0
-	for _, r := range s {
-		if isCJK(r) {
-			width += 2
-		} else {
-			width += 1
-		}
-	}
-	return width
-}
-
-func isCJK(r rune) bool {
-	return (r >= 0x4E00 && r <= 0x9FFF) ||
-		(r >= 0x3400 && r <= 0x4DBF) ||
-		(r >= 0x20000 && r <= 0x2A6DF) ||
-		(r >= 0x2A700 && r <= 0x2B73F)
-}
-
-func padByWidth(s string, totalWidth int) string {
-	currentWidth := getStringDisplayWidth(s)
-	padding := totalWidth - currentWidth
-	if padding <= 0 {
-		return s
-	}
-	return s + strings.Repeat(" ", padding)
-}
-
-func padLeftByWidth(s string, totalWidth int) string {
-	currentWidth := getStringDisplayWidth(s)
-	padding := totalWidth - currentWidth
-	if padding <= 0 {
-		return s
-	}
-	return strings.Repeat(" ", padding) + s
-}
-
-func isSymbolicLink(path string) bool {
-	_, err := os.Readlink(path)
-	return err == nil
-}
-
-func getFileType(info fs.FileInfo, path string) FileType {
-	// 优先检查符号链接
-	if isSymbolicLink(path) {
-		return FileTypeSymbolicLink
-	}
-
-	// 然后检查目录
-	if info.IsDir() {
-		return FileTypeDirectory
-	}
-
-	// 在非Windows系统检查可执行权限
-	if runtime.GOOS != "windows" {
-		if info.Mode()&0111 != 0 {
-			return FileTypeExecutable
-		}
-	}
-
-	// 最后检查文件扩展名
-	ext := strings.ToLower(filepath.Ext(info.Name()))
-
-	for _, backupExt := range backupExtensions {
-		if ext == backupExt {
-			return FileTypeBackup
-		}
-	}
-
-	for _, mediaExt := range mediaExtensions {
-		if ext == mediaExt {
-			return FileTypeMedia
-		}
-	}
-
-	for _, archiveExt := range archiveExtensions {
-		if ext == archiveExt {
-			return FileTypeArchive
-		}
-	}
-
-	// 在Windows系统检查可执行扩展名
-	if runtime.GOOS == "windows" {
-		for _, execExt := range executableExtensions {
-			if ext == execExt {
-				return FileTypeExecutable
-			}
-		}
-	}
-
-	return FileTypeOther
-}
+// ─────────────────────────────────────────────
+// Argument parsing
+// ─────────────────────────────────────────────
 
 func parseArgs(args []string) (*LSArgs, error) {
-	lsArgs := &LSArgs{
-		Path: ".",
-	}
+	lsArgs := &LSArgs{Path: "."}
 
-	validOptions := "fclrSsSh"
+	validOptions := "faclrSsSh"
 
 	i := 0
 	for i < len(args) {
@@ -317,13 +367,22 @@ func parseArgs(args []string) (*LSArgs, error) {
 				}
 			}
 
-			if strings.Contains(options, "S") {
+			// Enforce mutual exclusivity of -s and -S.
+			hasS := strings.ContainsRune(options, 'S')
+			hass := strings.ContainsRune(options, 's')
+			if hasS && hass {
+				fmt.Fprintln(os.Stderr, "Error: -s (case-insensitive) and -S (case-sensitive) are mutually exclusive")
+				lsArgs.ShowHelp = true
+				return lsArgs, nil
+			}
+
+			if hasS {
 				lsArgs.StrictCase = true
 				if i < len(args)-1 && !strings.HasPrefix(args[i+1], "-") {
 					i++
 					lsArgs.SearchTerm = args[i]
 				}
-			} else if strings.Contains(options, "s") {
+			} else if hass {
 				lsArgs.IgnoreCase = true
 				if i < len(args)-1 && !strings.HasPrefix(args[i+1], "-") {
 					i++
@@ -338,7 +397,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 						lsArgs.ShowFileType = true
 						if i < len(args)-1 && !strings.HasPrefix(args[i+1], "-") {
 							next := args[i+1]
-							if len(next) == 1 && strings.ContainsAny(next, "/*@#~%") {
+							if len(next) == 1 && strings.ContainsAny(next, ValidTypeIndicators) {
 								lsArgs.FilterType = next
 								i++
 							}
@@ -347,15 +406,16 @@ func parseArgs(args []string) (*LSArgs, error) {
 						lsArgs.SetColor = true
 					case 'r':
 						lsArgs.Recursive = true
+					case 'a':
+						lsArgs.ShowAll = true
 					}
 				}
 			}
 		} else {
-			// 处理路径参数
+			// Positional path argument.
 			if lsArgs.Path == "." {
 				lsArgs.Path = arg
 			} else {
-				// 如果有多个路径参数,只取第一个
 				fmt.Fprintf(os.Stderr, "Warning: multiple paths not supported, using first path: %s\n", lsArgs.Path)
 			}
 		}
@@ -365,13 +425,175 @@ func parseArgs(args []string) (*LSArgs, error) {
 	return lsArgs, nil
 }
 
-func getTerminalWidth() int {
-	width, _, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil || width <= 0 {
-		return 80
-	}
-	return width
+// ─────────────────────────────────────────────
+// File-type detection
+// ─────────────────────────────────────────────
+
+// isSymbolicLink uses Lstat so it works correctly on all platforms,
+// including when the link target does not exist.
+func isSymbolicLink(path string) bool {
+	fi, err := os.Lstat(path)
+	return err == nil && fi.Mode()&os.ModeSymlink != 0
 }
+
+func getFileType(info fs.FileInfo, path string) FileType {
+	// Symbolic link check MUST come before directory check because a symlink
+	// to a directory would otherwise report as a directory.
+	if isSymbolicLink(path) {
+		return FileTypeSymbolicLink
+	}
+
+	if info.IsDir() {
+		return FileTypeDirectory
+	}
+
+	// On non-Windows systems honour the executable permission bits.
+	if runtime.GOOS != "windows" {
+		if info.Mode()&0111 != 0 {
+			return FileTypeExecutable
+		}
+	}
+
+	ext := strings.ToLower(filepath.Ext(info.Name()))
+
+	// O(1) map lookup instead of iterating three slices.
+	if ft, ok := extTypeMap[ext]; ok {
+		// On non-Windows systems we only return FileTypeExecutable from the
+		// extension map when running on Windows.
+		if ft == FileTypeExecutable && runtime.GOOS != "windows" {
+			return FileTypeOther
+		}
+		return ft
+	}
+
+	return FileTypeOther
+}
+
+// ─────────────────────────────────────────────
+// Filtering
+// ─────────────────────────────────────────────
+
+func passesFilter(name string, fileType FileType, args *LSArgs) bool {
+	if args.SearchTerm != "" {
+		if args.IgnoreCase {
+			if !strings.Contains(strings.ToLower(name), strings.ToLower(args.SearchTerm)) {
+				return false
+			}
+		} else if args.StrictCase {
+			if !strings.Contains(name, args.SearchTerm) {
+				return false
+			}
+		}
+	}
+
+	if args.FilterType != "" {
+		if typeIndicators[fileType] != args.FilterType {
+			return false
+		}
+	}
+
+	return true
+}
+
+// ─────────────────────────────────────────────
+// Tree-entry formatting helper (DRY)
+// ─────────────────────────────────────────────
+
+// formatTreeEntry computes the display name for a single directory entry in
+// tree mode and reports whether the entry should be skipped.
+func formatTreeEntry(entry fs.DirEntry, fullPath string, args *LSArgs) (displayName string, isDir bool, skip bool) {
+	// Hidden-file filtering.
+	if !args.ShowAll && strings.HasPrefix(entry.Name(), ".") {
+		return "", false, true
+	}
+
+	// Prefer DirEntry.Info() to avoid a redundant Lstat call; fall back to
+	// Lstat only for symbolic links so we get accurate link information.
+	var info fs.FileInfo
+	var err error
+	if entry.Type()&os.ModeSymlink != 0 {
+		info, err = os.Lstat(fullPath)
+	} else {
+		info, err = entry.Info()
+	}
+	if err != nil {
+		return "", false, true
+	}
+
+	isDir = entry.IsDir()
+	name := entry.Name()
+	fileType := getFileType(info, fullPath)
+
+	if !passesFilter(name, fileType, args) {
+		return "", isDir, true
+	}
+
+	if args.ShowFileType {
+		name += typeIndicators[fileType]
+	}
+
+	if !isOutputRedirected() && args.SetColor {
+		displayName = colorMap[fileType] + name + ansiReset
+	} else {
+		displayName = name
+	}
+	return displayName, isDir, false
+}
+
+// ─────────────────────────────────────────────
+// Tree display (unified – no duplicate printing)
+// ─────────────────────────────────────────────
+
+// displayTree prints the directory tree rooted at path in the style of the
+// standard `tree` command.  The root is always printed by the caller (main).
+// Each node is printed exactly once: by its parent when iterating children.
+func displayTree(path string, args *LSArgs, prefix string) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: cannot read directory %s: %v\n", path, err)
+		return
+	}
+
+	// Collect visible, filtered entries.
+	var visible []fs.DirEntry
+	for _, entry := range entries {
+		if !args.ShowAll && strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		visible = append(visible, entry)
+	}
+
+	sort.Slice(visible, func(i, j int) bool {
+		return strings.ToLower(visible[i].Name()) < strings.ToLower(visible[j].Name())
+	})
+
+	for i, entry := range visible {
+		fullPath := filepath.Join(path, entry.Name())
+
+		isLast := i == len(visible)-1
+		connector := "├── "
+		newPrefix := prefix + "│   "
+		if isLast {
+			connector = "└── "
+			newPrefix = prefix + "    "
+		}
+
+		displayName, isDir, skip := formatTreeEntry(entry, fullPath, args)
+		if skip {
+			continue
+		}
+
+		fmt.Printf("%s%s%s\n", prefix, connector, displayName)
+
+		if isDir {
+			displayTree(fullPath, args, newPrefix)
+		}
+	}
+}
+
+// ─────────────────────────────────────────────
+// Layout / column calculation
+// ─────────────────────────────────────────────
 
 func calculateLayout(displayWidths []int, windowWidth int) (rows, cols int, colWidths []int) {
 	if len(displayWidths) == 0 {
@@ -382,30 +604,26 @@ func calculateLayout(displayWidths []int, windowWidth int) (rows, cols int, colW
 	cols = 1
 	colWidths = []int{maxIntSlice(displayWidths)}
 
-	calcWidth := func(displayWidths []int, padding, cols int) (int, []int) {
-		maxWidths := make([]int, cols)
-		perLines := (len(displayWidths) / cols)
-		if len(displayWidths)%cols != 0 {
-			perLines++
+	calcWidth := func(widths []int, pad, ncols int) (int, []int) {
+		maxWidths := make([]int, ncols)
+		perLine := len(widths) / ncols
+		if len(widths)%ncols != 0 {
+			perLine++
 		}
-
-		for i := 0; i < cols; i++ {
-			startIdx := i * perLines
-			endIdx := minInt(startIdx+perLines, len(displayWidths))
-			if startIdx < len(displayWidths) {
-				for j := startIdx; j < endIdx; j++ {
-					if displayWidths[j] > maxWidths[i] {
-						maxWidths[i] = displayWidths[j]
-					}
+		for col := 0; col < ncols; col++ {
+			start := col * perLine
+			end := minInt(start+perLine, len(widths))
+			for j := start; j < end; j++ {
+				if widths[j] > maxWidths[col] {
+					maxWidths[col] = widths[j]
 				}
 			}
 		}
-
 		sum := 0
 		for _, w := range maxWidths {
 			sum += w
 		}
-		return sum + (cols-1)*padding, maxWidths
+		return sum + (ncols-1)*pad, maxWidths
 	}
 
 	for {
@@ -413,17 +631,15 @@ func calculateLayout(displayWidths []int, windowWidth int) (rows, cols int, colW
 		if nextCols > len(displayWidths) {
 			break
 		}
-
 		tmpWidth, tmpColWidths := calcWidth(displayWidths, padding, nextCols)
 		if tmpWidth > windowWidth {
 			break
 		}
-
 		colWidths = tmpColWidths
 		cols = nextCols
 	}
 
-	rows = (len(displayWidths) / cols)
+	rows = len(displayWidths) / cols
 	if len(displayWidths)%cols != 0 {
 		rows++
 	}
@@ -434,13 +650,13 @@ func maxIntSlice(nums []int) int {
 	if len(nums) == 0 {
 		return 0
 	}
-	max := nums[0]
-	for _, num := range nums[1:] {
-		if num > max {
-			max = num
+	m := nums[0]
+	for _, n := range nums[1:] {
+		if n > m {
+			m = n
 		}
 	}
-	return max
+	return m
 }
 
 func maxInt(a, b int) int {
@@ -457,32 +673,9 @@ func minInt(a, b int) int {
 	return b
 }
 
-func passesFilter(name string, fileType FileType, args *LSArgs) bool {
-	if args.SearchTerm != "" {
-		if args.IgnoreCase {
-			if !strings.Contains(strings.ToLower(name), strings.ToLower(args.SearchTerm)) {
-				return false
-			}
-		} else if args.StrictCase {
-			if !strings.Contains(name, args.SearchTerm) {
-				return false
-			}
-		}
-	}
-
-	if args.FilterType != "" {
-		typeId := typeIndicators[fileType]
-		if typeId != args.FilterType {
-			return false
-		}
-	}
-
-	return true
-}
-
-func getOwner() string {
-	return currentUser
-}
+// ─────────────────────────────────────────────
+// File metadata helpers
+// ─────────────────────────────────────────────
 
 func getLinkCount(info fs.FileInfo) uint64 {
 	if info.IsDir() {
@@ -501,123 +694,12 @@ func formatSize(size int64) string {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f%c",
-		float64(size)/float64(div), "KMGTPE"[exp])
+	return fmt.Sprintf("%.1f%c", float64(size)/float64(div), "KMGTPE"[exp])
 }
 
-func displayLongFormat(items []FileInfoEx, args *LSArgs) {
-	if len(items) == 0 {
-		fmt.Println("No matching files found")
-		return
-	}
-
-	modeWidth := 10
-	linksWidth := 6
-	ownerWidth := 9
-	sizeWidth := 8
-	timeWidth := 16
-	nameWidth := 12
-
-	// 计算每列的最大宽度
-	for _, item := range items {
-		baseName := item.Name()
-		if args.ShowFileType {
-			fileType := getFileType(item.FileInfo, item.Path)
-			baseName += typeIndicators[fileType]
-		}
-
-		if w := len(item.Mode().String()); w > modeWidth {
-			modeWidth = w
-		}
-		if w := len(strconv.FormatUint(item.Links, 10)); w > linksWidth {
-			linksWidth = w
-		}
-		if w := getStringDisplayWidth(item.OwnerName); w > ownerWidth {
-			ownerWidth = w
-		}
-		if w := len(formatSize(item.Size())); w > sizeWidth {
-			sizeWidth = w
-		}
-		if w := getStringDisplayWidth(baseName); w > nameWidth {
-			nameWidth = w
-		}
-	}
-
-	// 确保最小宽度
-	modeWidth = maxInt(modeWidth, 4)
-	linksWidth = maxInt(linksWidth, 5)
-	ownerWidth = maxInt(ownerWidth, 5)
-	sizeWidth = maxInt(sizeWidth, 4)
-	timeWidth = maxInt(timeWidth, 15)
-	nameWidth = maxInt(nameWidth, 4)
-
-	topLine := "┌" + strings.Repeat("─", modeWidth) + "┬" +
-		strings.Repeat("─", linksWidth) + "┬" +
-		strings.Repeat("─", ownerWidth) + "┬" +
-		strings.Repeat("─", sizeWidth) + "┬" +
-		strings.Repeat("─", timeWidth) + "┬" +
-		strings.Repeat("─", nameWidth) + "┐"
-
-	header := "│" + padByWidth("Mode", modeWidth) + "│" +
-		padByWidth("Links", linksWidth) + "│" +
-		padByWidth("Owner", ownerWidth) + "│" +
-		padByWidth("Size", sizeWidth) + "│" +
-		padByWidth("Change Time", timeWidth) + "│" +
-		padByWidth("Name", nameWidth) + "│"
-
-	divider := "├" + strings.Repeat("─", modeWidth) + "┼" +
-		strings.Repeat("─", linksWidth) + "┼" +
-		strings.Repeat("─", ownerWidth) + "┼" +
-		strings.Repeat("─", sizeWidth) + "┼" +
-		strings.Repeat("─", timeWidth) + "┼" +
-		strings.Repeat("─", nameWidth) + "┤"
-
-	bottomLine := "└" + strings.Repeat("─", modeWidth) + "┴" +
-		strings.Repeat("─", linksWidth) + "┴" +
-		strings.Repeat("─", ownerWidth) + "┴" +
-		strings.Repeat("─", sizeWidth) + "┴" +
-		strings.Repeat("─", timeWidth) + "┴" +
-		strings.Repeat("─", nameWidth) + "┘"
-
-	fmt.Println(topLine)
-	fmt.Println(header)
-	fmt.Println(divider)
-
-	for _, item := range items {
-		mode := padByWidth(item.Mode().String(), modeWidth)
-		links := padLeftByWidth(strconv.FormatUint(item.Links, 10), linksWidth)
-		owner := padByWidth(item.OwnerName, ownerWidth)
-		size := padLeftByWidth(formatSize(item.Size()), sizeWidth)
-
-		timeStr := item.ModTime().Format("2006/01/02 15:04")
-		if len(timeStr) > timeWidth {
-			timeStr = timeStr[:timeWidth]
-		} else {
-			timeStr = padByWidth(timeStr, timeWidth)
-		}
-
-		fileType := getFileType(item.FileInfo, item.Path)
-		baseName := item.Name()
-		if args.ShowFileType {
-			baseName += typeIndicators[fileType]
-		}
-
-		currentWidth := getStringDisplayWidth(baseName)
-		paddingSpaces := maxInt(0, nameWidth-currentWidth)
-
-		var name string
-		if !isOutputRedirected() && args.SetColor {
-			color := colorMap[fileType]
-			name = color + baseName + ansiReset + strings.Repeat(" ", paddingSpaces)
-		} else {
-			name = baseName + strings.Repeat(" ", paddingSpaces)
-		}
-
-		fmt.Printf("│%s│%s│%s│%s│%s│%s│\n", mode, links, owner, size, timeStr, name)
-	}
-
-	fmt.Println(bottomLine)
-}
+// ─────────────────────────────────────────────
+// Display: flat / column layout
+// ─────────────────────────────────────────────
 
 func displayItems(items []FileInfoEx, args *LSArgs) {
 	if len(items) == 0 {
@@ -625,10 +707,10 @@ func displayItems(items []FileInfoEx, args *LSArgs) {
 		return
 	}
 
-	var displayNames []string
-	var displayWidths []int
+	displayNames := make([]string, len(items))
+	displayWidths := make([]int, len(items))
 
-	for _, item := range items {
+	for i, item := range items {
 		fileType := getFileType(item.FileInfo, item.Path)
 		baseName := item.Name()
 
@@ -636,40 +718,29 @@ func displayItems(items []FileInfoEx, args *LSArgs) {
 			baseName += typeIndicators[fileType]
 		}
 
-		var displayName string
 		if !isOutputRedirected() && args.SetColor {
-			color := colorMap[fileType]
-			displayName = color + baseName + ansiReset
+			displayNames[i] = colorMap[fileType] + baseName + ansiReset
 		} else {
-			displayName = baseName
+			displayNames[i] = baseName
 		}
-
-		displayNames = append(displayNames, displayName)
-		displayWidths = append(displayWidths, getStringDisplayWidth(baseName))
+		displayWidths[i] = getStringDisplayWidth(baseName)
 	}
 
 	windowWidth := getTerminalWidth()
 	rows, _, colWidths := calculateLayout(displayWidths, windowWidth)
 
 	lines := make([][]string, rows)
-	for i := range lines {
-		lines[i] = make([]string, 0)
-	}
 
-	for idx := 0; idx < len(displayNames); idx++ {
+	for idx, name := range displayNames {
 		row := idx % rows
 		col := idx / rows
-
 		if col >= len(colWidths) {
 			continue
 		}
-
-		name := displayNames[idx]
 		padding := colWidths[col] - displayWidths[idx]
 		if padding > 0 {
 			name += strings.Repeat(" ", padding)
 		}
-
 		lines[row] = append(lines[row], name)
 	}
 
@@ -679,115 +750,157 @@ func displayItems(items []FileInfoEx, args *LSArgs) {
 	}
 }
 
-func displayTree(path string, args *LSArgs, level int, prefix string) {
-	info, err := os.Lstat(path)
-	if err != nil {
+// ─────────────────────────────────────────────
+// Display: long / table format
+// ─────────────────────────────────────────────
+
+func displayLongFormat(items []FileInfoEx, args *LSArgs) {
+	if len(items) == 0 {
+		fmt.Println("No matching files found")
 		return
 	}
 
-	name := info.Name()
-	fileType := getFileType(info, path)
+	// Whether to show the Links column (meaningless on Windows).
+	showLinks := runtime.GOOS != "windows"
 
-	// 应用过滤条件
-	if !passesFilter(name, fileType, args) {
-		return
+	modeWidth := 4
+	linksWidth := 5
+	ownerWidth := 5
+	sizeWidth := 4
+	timeWidth := 15
+	nameWidth := 4
+
+	// Pre-compute formatted values to avoid duplicate calls.
+	type rowData struct {
+		mode      string
+		links     string
+		owner     string
+		size      string
+		timeStr   string
+		baseName  string
+		fileType  FileType
 	}
 
-	// 添加类型指示器
-	if args.ShowFileType {
-		name += typeIndicators[fileType]
-	}
+	rows := make([]rowData, len(items))
+	for i, item := range items {
+		ft := getFileType(item.FileInfo, item.Path)
+		bn := item.Name()
+		if args.ShowFileType {
+			bn += typeIndicators[ft]
+		}
+		ts := item.ModTime().Format("2006/01/02 15:04")
 
-	// 应用颜色
-	var displayName string
-	if !isOutputRedirected() && args.SetColor {
-		color := colorMap[fileType]
-		displayName = color + name + ansiReset
-	} else {
-		displayName = name
-	}
-
-	// 打印当前条目
-	if level == 0 {
-		// 根目录
-		fmt.Println(displayName)
-	} else {
-		fmt.Printf("%s%s\n", prefix, displayName)
-	}
-
-	// 如果是目录,递归处理
-	if info.IsDir() {
-		entries, err := os.ReadDir(path)
-		if err != nil {
-			return
+		rows[i] = rowData{
+			mode:     item.Mode().String(),
+			links:    strconv.FormatUint(item.Links, 10),
+			owner:    item.OwnerName,
+			size:     formatSize(item.Size()),
+			timeStr:  ts,
+			baseName: bn,
+			fileType: ft,
 		}
 
-		// 过滤掉隐藏文件 (以.开头)
-		var visibleEntries []fs.DirEntry
-		for _, entry := range entries {
-			if !strings.HasPrefix(entry.Name(), ".") {
-				visibleEntries = append(visibleEntries, entry)
+		if w := len(rows[i].mode); w > modeWidth {
+			modeWidth = w
+		}
+		if showLinks {
+			if w := len(rows[i].links); w > linksWidth {
+				linksWidth = w
 			}
 		}
-		entries = visibleEntries
-
-		// 排序条目
-		sort.Slice(entries, func(i, j int) bool {
-			return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
-		})
-
-		for i, entry := range entries {
-			fullPath := filepath.Join(path, entry.Name())
-			entryInfo, err := os.Lstat(fullPath)
-			if err != nil {
-				continue
-			}
-
-			childName := entryInfo.Name()
-			childType := getFileType(entryInfo, fullPath)
-
-			// 对子项应用过滤条件
-			if !passesFilter(childName, childType, args) {
-				continue
-			}
-
-			if args.ShowFileType {
-				childName += typeIndicators[childType]
-			}
-
-			var childDisplayName string
-			if !isOutputRedirected() && args.SetColor {
-				color := colorMap[childType]
-				childDisplayName = color + childName + ansiReset
-			} else {
-				childDisplayName = childName
-			}
-
-			// 确定连接线
-			connector := "├── "
-			newPrefix := prefix + "│   "
-			if i == len(entries)-1 {
-				connector = "└── "
-				newPrefix = prefix + "    "
-			}
-
-			fmt.Printf("%s%s%s\n", prefix, connector, childDisplayName)
-
-			// 如果子项是目录,递归处理
-			if entry.IsDir() {
-				displayTree(fullPath, args, level+1, newPrefix)
-			}
+		if w := getStringDisplayWidth(rows[i].owner); w > ownerWidth {
+			ownerWidth = w
+		}
+		if w := len(rows[i].size); w > sizeWidth {
+			sizeWidth = w
+		}
+		if w := getStringDisplayWidth(rows[i].baseName); w > nameWidth {
+			nameWidth = w
 		}
 	}
+
+	modeWidth = maxInt(modeWidth, 4)
+	linksWidth = maxInt(linksWidth, 5)
+	ownerWidth = maxInt(ownerWidth, 5)
+	sizeWidth = maxInt(sizeWidth, 4)
+	timeWidth = maxInt(timeWidth, 15)
+	nameWidth = maxInt(nameWidth, 4)
+
+	// Helper to build a border row.
+	border := func(left, mid, right, h string) string {
+		parts := []string{
+			strings.Repeat(h, modeWidth),
+			strings.Repeat(h, ownerWidth),
+			strings.Repeat(h, sizeWidth),
+			strings.Repeat(h, timeWidth),
+			strings.Repeat(h, nameWidth),
+		}
+		if showLinks {
+			// Insert links column after mode.
+			parts = append([]string{parts[0], strings.Repeat(h, linksWidth)}, parts[1:]...)
+		}
+		return left + strings.Join(parts, mid) + right
+	}
+
+	topLine := border("┌", "┬", "┐", "─")
+	divider := border("├", "┼", "┤", "─")
+	bottomLine := border("└", "┴", "┘", "─")
+
+	// Header row.
+	headerFields := []string{
+		padByWidth("Mode", modeWidth),
+		padByWidth("Owner", ownerWidth),
+		padByWidth("Size", sizeWidth),
+		padByWidth("Change Time", timeWidth),
+		padByWidth("Name", nameWidth),
+	}
+	if showLinks {
+		headerFields = append([]string{headerFields[0], padByWidth("Links", linksWidth)}, headerFields[1:]...)
+	}
+	header := "│" + strings.Join(headerFields, "│") + "│"
+
+	fmt.Println(topLine)
+	fmt.Println(header)
+	fmt.Println(divider)
+
+	for _, rd := range rows {
+		mode := padByWidth(rd.mode, modeWidth)
+		owner := padByWidth(rd.owner, ownerWidth)
+		size := padLeftByWidth(rd.size, sizeWidth)
+
+		// Truncate time with ellipsis indicator if needed.
+		ts := rd.timeStr
+		const ellipsis = "…"
+		if len(ts) > timeWidth {
+			// Leave room for the ellipsis (1 rune = 3 UTF-8 bytes, but 1 display cell).
+			ts = ts[:timeWidth-1] + ellipsis
+		} else {
+			ts = padByWidth(ts, timeWidth)
+		}
+
+		currentWidth := getStringDisplayWidth(rd.baseName)
+		paddingSpaces := maxInt(0, nameWidth-currentWidth)
+
+		var nameField string
+		if !isOutputRedirected() && args.SetColor {
+			nameField = colorMap[rd.fileType] + rd.baseName + ansiReset + strings.Repeat(" ", paddingSpaces)
+		} else {
+			nameField = rd.baseName + strings.Repeat(" ", paddingSpaces)
+		}
+
+		fields := []string{mode, owner, size, ts, nameField}
+		if showLinks {
+			fields = append([]string{fields[0], padLeftByWidth(rd.links, linksWidth)}, fields[1:]...)
+		}
+		fmt.Println("│" + strings.Join(fields, "│") + "│")
+	}
+
+	fmt.Println(bottomLine)
 }
 
-func init() {
-	// 初始化当前用户信息
-	u, err := user.Current()
-	if err == nil {
-		currentUser = u.Username
-	}
-}
+// ─────────────────────────────────────────────
+// main
+// ─────────────────────────────────────────────
 
 func main() {
 	args, err := parseArgs(os.Args[1:])
@@ -801,88 +914,99 @@ func main() {
 		return
 	}
 
+	// filepath.Clean already normalises separators on every platform,
+	// including Windows — do NOT do an additional ReplaceAll here as it
+	// would corrupt UNC paths (\\server\share).
 	args.Path = filepath.Clean(args.Path)
-	if runtime.GOOS == "windows" {
-		args.Path = strings.ReplaceAll(args.Path, "/", "\\")
-	}
 
-	// 检查路径是否存在
 	fileInfo, err := os.Stat(args.Path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error accessing path: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 递归模式处理
+	// ── Recursive / tree mode ──────────────────────────────────────────
 	if args.Recursive {
-		// 先检查根目录是否满足过滤条件
 		rootName := fileInfo.Name()
 		rootType := getFileType(fileInfo, args.Path)
+
+		// Always print the root directory header.
+		var rootDisplay string
+		if !isOutputRedirected() && args.SetColor {
+			rootDisplay = colorMap[rootType] + rootName + ansiReset
+		} else {
+			rootDisplay = rootName
+		}
+		if args.ShowFileType {
+			rootDisplay += typeIndicators[rootType]
+		}
+		fmt.Println(rootDisplay)
+
+		// Only recurse into it when it passes the filter (or there is no
+		// filter, meaning all roots are valid).
 		if passesFilter(rootName, rootType, args) {
-			displayTree(args.Path, args, 0, "")
-		} else if fileInfo.IsDir() {
-			// 如果根目录是目录但不满足过滤条件,但需要递归进入查看子项
-			fmt.Println(rootName)
-			displayTreeRecursive(args.Path, "", args)
+			displayTree(args.Path, args, "")
 		}
 		return
 	}
 
-	// 非递归模式
+	// ── Non-recursive mode ────────────────────────────────────────────
 	var items []FileInfoEx
-	var entries []fs.DirEntry
-	var fullPath string
 
 	if fileInfo.IsDir() {
-		entries, err = os.ReadDir(args.Path)
+		entries, err := os.ReadDir(args.Path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading directory: %v\n", err)
 			os.Exit(1)
 		}
+
+		for _, entry := range entries {
+			// Hidden-file filtering.
+			if !args.ShowAll && strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+
+			fullPath := filepath.Join(args.Path, entry.Name())
+
+			// Use DirEntry.Info() to avoid an extra syscall; Lstat only for symlinks.
+			var info fs.FileInfo
+			if entry.Type()&os.ModeSymlink != 0 {
+				info, err = os.Lstat(fullPath)
+			} else {
+				info, err = entry.Info()
+			}
+			if err != nil {
+				continue
+			}
+
+			fileType := getFileType(info, fullPath)
+			if !passesFilter(entry.Name(), fileType, args) {
+				continue
+			}
+
+			items = append(items, FileInfoEx{
+				FileInfo:  info,
+				Path:      fullPath,
+				Links:     getLinkCount(info),
+				OwnerName: currentUser,
+			})
+		}
 	} else {
-		// 处理单个文件
-		fullPath = args.Path
-		info, err := os.Lstat(fullPath)
+		// Single-file argument.
+		info, err := os.Lstat(args.Path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error accessing file: %v\n", err)
 			os.Exit(1)
 		}
-		owner := currentUser
-		links := getLinkCount(info)
-
 		items = append(items, FileInfoEx{
 			FileInfo:  info,
-			Path:      fullPath,
-			Links:     links,
-			OwnerName: owner,
+			Path:      args.Path,
+			Links:     getLinkCount(info),
+			OwnerName: currentUser,
 		})
 	}
 
-	// 处理目录中的多个文件
-	for _, entry := range entries {
-		fullPath = filepath.Join(args.Path, entry.Name())
-		info, err := os.Lstat(fullPath)
-		if err != nil {
-			continue
-		}
-
-		fileType := getFileType(info, fullPath)
-		if !passesFilter(entry.Name(), fileType, args) {
-			continue
-		}
-
-		owner := currentUser
-		links := getLinkCount(info)
-
-		items = append(items, FileInfoEx{
-			FileInfo:  info,
-			Path:      fullPath,
-			Links:     links,
-			OwnerName: owner,
-		})
-	}
-
-	// 排序条目
+	// Sort entries.
 	sort.Slice(items, func(i, j int) bool {
 		if runtime.GOOS == "windows" {
 			return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
@@ -894,72 +1018,5 @@ func main() {
 		displayLongFormat(items, args)
 	} else {
 		displayItems(items, args)
-	}
-}
-
-// 专门用于递归显示的函数,确保即使根目录不满足条件也能进入子目录
-func displayTreeRecursive(path string, prefix string, args *LSArgs) {
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return
-	}
-
-	// 过滤掉隐藏文件 (以.开头)
-	var visibleEntries []fs.DirEntry
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Name(), ".") {
-			visibleEntries = append(visibleEntries, entry)
-		}
-	}
-	entries = visibleEntries
-
-	// 排序条目
-	sort.Slice(entries, func(i, j int) bool {
-		return strings.ToLower(entries[i].Name()) < strings.ToLower(entries[j].Name())
-	})
-
-	for i, entry := range entries {
-		fullPath := filepath.Join(path, entry.Name())
-		info, err := os.Lstat(fullPath)
-		if err != nil {
-			continue
-		}
-
-		name := info.Name()
-		fileType := getFileType(info, fullPath)
-
-		// 应用过滤条件
-		if !passesFilter(name, fileType, args) {
-			continue
-		}
-
-		// 添加类型指示器
-		if args.ShowFileType {
-			name += typeIndicators[fileType]
-		}
-
-		// 应用颜色
-		var displayName string
-		if !isOutputRedirected() && args.SetColor {
-			color := colorMap[fileType]
-			displayName = color + name + ansiReset
-		} else {
-			displayName = name
-		}
-
-		// 确定连接线
-		connector := "├── "
-		newPrefix := prefix + "│   "
-		if i == len(entries)-1 {
-			connector = "└── "
-			newPrefix = prefix + "    "
-		}
-
-		fmt.Printf("%s%s%s\n", prefix, connector, displayName)
-
-		// 如果是目录,递归处理
-		if entry.IsDir() {
-			displayTreeRecursive(fullPath, newPrefix, args)
-		}
 	}
 }
