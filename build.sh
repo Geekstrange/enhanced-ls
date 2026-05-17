@@ -67,6 +67,11 @@ for PLATFORM in "${PLATFORMS[@]}"; do
   printf "\033[32mCompiling\033[0m $GOOS/$GOARCH -> $TMP_DIR/$BINARY_NAME\n"
   env GOOS=$GOOS GOARCH=$GOARCH go build -o "$TMP_DIR/$BINARY_NAME" .
 
+  # 确保非 Windows 平台的二进制文件具有可执行权限
+  if [ "$GOOS" != "windows" ]; then
+    chmod +x "$TMP_DIR/$BINARY_NAME"
+  fi
+
   # 打包为 tar.gz，压缩包命名包含版本和平台信息
   TAR_NAME="$NAME-$VERSION-${GOOS}_${GOARCH}.tar.gz"
   printf "\033[32mPackaging\033[0m $TAR_NAME\n"

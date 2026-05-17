@@ -9,6 +9,8 @@ import (
 	"syscall"
 )
 
+const detectExecutableByExtension = false
+
 func getFileOwnerGroup(info fs.FileInfo) (string, string) {
 	sys := info.Sys()
 	stat, ok := sys.(*syscall.Stat_t)
@@ -24,4 +26,18 @@ func getFileOwnerGroup(info fs.FileInfo) (string, string) {
 		gid = g.Name
 	}
 	return uid, gid
+}
+
+func getLinkCount(info fs.FileInfo) uint64 {
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		return uint64(stat.Nlink)
+	}
+	if info.IsDir() {
+		return 2
+	}
+	return 1
+}
+
+func checkExecutable(info fs.FileInfo) bool {
+	return info.Mode()&0111 != 0
 }

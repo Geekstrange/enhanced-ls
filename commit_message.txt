@@ -1,15 +1,8 @@
-feat(long-format): replicate Nushell ls -l output style
+refactor(platform): consolidate platform-specific logic and fix build
 
-- Add rounded table borders (╭╮╰╯) matching Nushell aesthetic
-- Add relative timestamps (e.g. "10 months ago") via formatRelativeTime()
-- Add row index (#) column with 0-based numbering
-- Split owner into separate user/group columns with real OS lookup
-- Add cell padding (1 space each side) for Nushell-style spacing
-- Center-align lowercase green header labels
-- Add centerByWidth() helper for header alignment
-- Add platform-specific owner/group resolution (owner_unix.go, owner_windows.go)
-- Expand file extension lists for broader type detection
-- Add O(1) extension lookup via extTypeMap in init()
-- Update build.sh to compile full package instead of single file
-
-BREAKING CHANGE: -l output format changed — columns reordered to #/name/mode/num_links/user/group/size/modified, table borders and header style updated
+- Consolidate owner_unix.go/owner_windows.go into platform_unix.go/platform_windows.go
+- Move getLinkCount to platform files with real syscall Nlink on Unix
+- Move executable detection to platform files via checkExecutable() and detectExecutableByExtension const
+- Remove runtime.GOOS checks from getFileType in favor of build-tag dispatch
+- Fix cross-compilation type mismatch: cast stat.Nlink to uint64 for arm64/loong64/darwin
+- Fix build.sh: add chmod +x before tar to preserve executable permissions in archives

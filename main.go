@@ -456,20 +456,15 @@ func getFileType(info fs.FileInfo, path string) FileType {
 		return FileTypeDirectory
 	}
 
-	// On non-Windows systems honour the executable permission bits.
-	if runtime.GOOS != "windows" {
-		if info.Mode()&0111 != 0 {
-			return FileTypeExecutable
-		}
+	if checkExecutable(info) {
+		return FileTypeExecutable
 	}
 
 	ext := strings.ToLower(filepath.Ext(info.Name()))
 
 	// O(1) map lookup instead of iterating three slices.
 	if ft, ok := extTypeMap[ext]; ok {
-		// On non-Windows systems we only return FileTypeExecutable from the
-		// extension map when running on Windows.
-		if ft == FileTypeExecutable && runtime.GOOS != "windows" {
+		if ft == FileTypeExecutable && !detectExecutableByExtension {
 			return FileTypeOther
 		}
 		return ft
@@ -685,13 +680,6 @@ func minInt(a, b int) int {
 // ─────────────────────────────────────────────
 // File metadata helpers
 // ─────────────────────────────────────────────
-
-func getLinkCount(info fs.FileInfo) uint64 {
-	if info.IsDir() {
-		return 2
-	}
-	return 1
-}
 
 func formatRelativeTime(t time.Time) string {
 	now := time.Now()
