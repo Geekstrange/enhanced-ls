@@ -270,7 +270,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.1.1 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.1.2 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
 	reset := ansiReset
@@ -549,10 +549,19 @@ func formatTreeEntry(entry fs.DirEntry, fullPath string, args *LSArgs) (displayN
 // Tree display (unified – no duplicate printing)
 // ─────────────────────────────────────────────
 
+var treeDepthColors = []string{
+	"\033[2;33m", // dim yellow
+	"\033[2;36m", // dim cyan
+	"\033[2;32m", // dim green
+	"\033[2;35m", // dim magenta
+	"\033[2;34m", // dim blue
+	"\033[2;91m", // dim bright red
+}
+
 // displayTree prints the directory tree rooted at path in the style of the
 // standard `tree` command.  The root is always printed by the caller (main).
 // Each node is printed exactly once: by its parent when iterating children.
-func displayTree(path string, args *LSArgs, prefix string) {
+func displayTree(path string, args *LSArgs, prefix string, depth int) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "warning: cannot read directory %s: %v\n", path, err)
@@ -572,10 +581,10 @@ func displayTree(path string, args *LSArgs, prefix string) {
 		return strings.ToLower(visible[i].Name()) < strings.ToLower(visible[j].Name())
 	})
 
-	useGray := !isOutputRedirected() && args.SetColor
+	canColor := !isOutputRedirected()
 	colorize := func(s string) string {
-		if useGray {
-			return "\033[90m" + s + ansiReset
+		if canColor {
+			return treeDepthColors[depth%len(treeDepthColors)] + s + ansiReset
 		}
 		return s
 	}
@@ -599,7 +608,7 @@ func displayTree(path string, args *LSArgs, prefix string) {
 		fmt.Printf("%s%s%s\n", prefix, connector, displayName)
 
 		if isDir {
-			displayTree(fullPath, args, newPrefix)
+			displayTree(fullPath, args, newPrefix, depth+1)
 		}
 	}
 }
@@ -1064,7 +1073,7 @@ func main() {
 		// Only recurse into it when it passes the filter (or there is no
 		// filter, meaning all roots are valid).
 		if passesFilter(rootName, rootType, args) {
-			displayTree(args.Path, args, "")
+			displayTree(args.Path, args, "", 0)
 		}
 		return
 	}
