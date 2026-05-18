@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/signal"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -269,7 +270,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.1.0 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.1.1 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
 	reset := ansiReset
@@ -571,14 +572,22 @@ func displayTree(path string, args *LSArgs, prefix string) {
 		return strings.ToLower(visible[i].Name()) < strings.ToLower(visible[j].Name())
 	})
 
+	useGray := !isOutputRedirected() && args.SetColor
+	colorize := func(s string) string {
+		if useGray {
+			return "\033[90m" + s + ansiReset
+		}
+		return s
+	}
+
 	for i, entry := range visible {
 		fullPath := filepath.Join(path, entry.Name())
 
 		isLast := i == len(visible)-1
-		connector := "├── "
-		newPrefix := prefix + "│   "
+		connector := colorize("├── ")
+		newPrefix := prefix + colorize("│") + "   "
 		if isLast {
-			connector = "└── "
+			connector = colorize("╰── ")
 			newPrefix = prefix + "    "
 		}
 
@@ -794,6 +803,33 @@ func displayItems(items []FileInfoEx, args *LSArgs) {
 	}
 }
 
+func colorizeModeString(mode string) string {
+	var b strings.Builder
+	for _, ch := range mode {
+		switch ch {
+		case 'd':
+			b.WriteString("\033[94m")
+			b.WriteRune(ch)
+			b.WriteString(ansiReset)
+		case 'r':
+			b.WriteString("\033[93m")
+			b.WriteRune(ch)
+			b.WriteString(ansiReset)
+		case 'w':
+			b.WriteString("\033[91m")
+			b.WriteRune(ch)
+			b.WriteString(ansiReset)
+		case 'x':
+			b.WriteString("\033[32m")
+			b.WriteRune(ch)
+			b.WriteString(ansiReset)
+		default:
+			b.WriteRune(ch)
+		}
+	}
+	return b.String()
+}
+
 // ─────────────────────────────────────────────
 // Display: long / table format
 // ─────────────────────────────────────────────
@@ -930,7 +966,7 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 		centerByWidth("modified", timeWidth),
 	}
 	if showLinks {
-		headerFields = append(headerFields[:3], append([]string{centerByWidth("num_links", linksWidth)}, headerFields[3:]...)...)
+		headerFields = append(headerFields[:3], append([]string{centerByWidth("links", linksWidth)}, headerFields[3:]...)...)
 	}
 	header := "│" + headerGreen + strings.Join(headerFields, headerReset+"│"+headerGreen) + headerReset + "│"
 
@@ -940,7 +976,13 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 
 	for i, rd := range rows {
 		idx := " " + padLeftByWidth(strconv.Itoa(i), idxWidth-pad) + " "
-		mode := " " + padByWidth(rd.mode, modeWidth-pad) + " "
+
+		var mode string
+		if !isOutputRedirected() && args.SetColor {
+			mode = " " + colorizeModeString(rd.mode) + strings.Repeat(" ", maxInt(0, modeWidth-pad-len(rd.mode))) + " "
+		} else {
+			mode = " " + padByWidth(rd.mode, modeWidth-pad) + " "
+		}
 		owner := " " + padByWidth(rd.owner, ownerWidth-pad) + " "
 		group := " " + padByWidth(rd.group, groupWidth-pad) + " "
 		size := " " + padLeftByWidth(rd.size, sizeWidth-pad) + " "
@@ -972,6 +1014,14 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 // ─────────────────────────────────────────────
 
 func main() {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	go func() {
+		<-sig
+		fmt.Print(ansiReset)
+		os.Exit(0)
+	}()
+
 	args, err := parseArgs(os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing arguments: %v\n", err)
