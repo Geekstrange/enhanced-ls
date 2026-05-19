@@ -19,12 +19,12 @@
 ## 安装
 
 1. 将项目克隆或下载到本地：
-   ```powershell
+   ```bash
    git clone https://github.com/Geekstrange/enhanced-ls.git
    ```
 
 2. 在 PowerShell 配置文件 (`$PROFILE`) 中添加以下内容：
-   ```powershell
+   ```bash
    # 移除现有的 ls 别名
    Remove-Item Alias:ls -ErrorAction SilentlyContinue
 
@@ -36,7 +36,7 @@
    ```
 
 3. 重新加载配置文件：
-   ```powershell
+   ```bash
    .$PROFILE
    ```
 
@@ -46,7 +46,7 @@
 
 ### 基本命令
 
-```powershell
+```bash
 ls [路径] [选项]
 ```
 
@@ -59,13 +59,14 @@ ls [路径] [选项]
 | `-l`或`-L` | 详细列表模式 |
 | `-s` | 忽略大小写查询 |
 | `-S` | 严格匹配大小写查询 |
+| `-r` | 递归显示 |
 | `--help`   | 显示帮助信息                 |
 
 ### 示例
 
 1. **基本使用**（多列布局，自动适应终端宽度）：
 
-   ```powershell
+   ```bash
    ls
    ```
 
@@ -73,7 +74,7 @@ ls [路径] [选项]
 
 2. **彩色输出**：
 
-   ```powershell
+   ```bash
    ls -c
    ```
 
@@ -81,7 +82,7 @@ ls [路径] [选项]
 
 3. **显示文件类型指示符**：
 
-   ```powershell
+   ```bash
    ls -f
    ```
 
@@ -89,7 +90,7 @@ ls [路径] [选项]
 
 5. **组合选项**（彩色+文件类型+表格指示符）：
 
-   ```powershell
+   ```bash
    ls -c -f -l或ls -cfl
    ```
 
@@ -97,22 +98,22 @@ ls [路径] [选项]
 
 6. **指定路径**：
 
-   ```powershell
+   ```bash
    ls C:\Users
    ls -l D:\Projects
    ```
 
-7. **忽略大小写查询**
+7. **递归显示**
 
-   ```powershell
+   ```bash
    ls -s "r"
    ```
 
-   ![ls-s](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lss.png)
+   ![ls-r](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lsr.png)
 
 8. **严格匹配大小写查询**
 
-   ```powershell
+   ```bash
    ls -S "R" -l
    ```
 
