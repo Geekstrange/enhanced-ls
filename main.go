@@ -67,7 +67,7 @@ var (
 		".g3", ".hdr", ".ief", ".jbig", ".jfif", ".jls", ".jp2",
 		".jpc", ".jpx", ".jpg", ".jpeg", ".jxl", ".raw", ".cr2",
 		".pbm", ".pcd", ".pcx", ".pgm", ".pict", ".png", ".pnm",
-		".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif",
+		".ppm", ".psd", ".ras", ".rgb", ".svg", ".tga", ".tif", ".gif",
 		".tiff", ".wbmp", ".xpm", ".bmp", ".webp", ".avif", ".ico",
 		".heic", ".heif", ".nef", ".arw", ".psb", ".glb", ".gltf",
 	}
@@ -883,6 +883,11 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 	for i, item := range items {
 		ft := getFileType(item.FileInfo, item.Path)
 		bn := item.Name()
+		if ft == FileTypeSymbolicLink {
+			if target, err := os.Readlink(item.Path); err == nil {
+				bn += " -> " + target
+			}
+		}
 		if args.ShowFileType {
 			bn += typeIndicators[ft]
 		}
