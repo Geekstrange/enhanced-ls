@@ -270,7 +270,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.1.3 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.1.4 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
 	reset := ansiReset
@@ -820,6 +820,10 @@ func colorizeModeString(mode string) string {
 			b.WriteString("\033[94m")
 			b.WriteRune(ch)
 			b.WriteString(ansiReset)
+		case 'L':
+			b.WriteString("\033[96m")
+			b.WriteRune('l')
+			b.WriteString(ansiReset)
 		case 'r':
 			b.WriteString("\033[93m")
 			b.WriteRune(ch)
@@ -830,6 +834,10 @@ func colorizeModeString(mode string) string {
 			b.WriteString(ansiReset)
 		case 'x':
 			b.WriteString("\033[32m")
+			b.WriteRune(ch)
+			b.WriteString(ansiReset)
+		case '-':
+			b.WriteString("\033[90m")
 			b.WriteRune(ch)
 			b.WriteString(ansiReset)
 		default:
