@@ -270,7 +270,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.1.4 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.1.5 (Cross-Platform)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
 	reset := ansiReset
@@ -1151,12 +1151,9 @@ func main() {
 		})
 	}
 
-	// Sort entries.
+	// Sort entries unconditionally in a case-insensitive manner to emulate standard `ls` sorting.
 	sort.Slice(items, func(i, j int) bool {
-		if runtime.GOOS == "windows" {
-			return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
-		}
-		return items[i].Name() < items[j].Name()
+		return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
 	})
 
 	if args.LongFormat {
