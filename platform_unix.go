@@ -38,6 +38,15 @@ func getLinkCount(info fs.FileInfo) uint64 {
 	return 1
 }
 
+// getBlockCount returns the on-disk usage of a file in 1K blocks,
+// mirroring GNU ls's "total N" line (stat.Blocks is in 512-byte units).
+func getBlockCount(info fs.FileInfo) uint64 {
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		return uint64(stat.Blocks / 2)
+	}
+	return 0
+}
+
 func checkExecutable(info fs.FileInfo) bool {
 	return info.Mode()&0111 != 0
 }

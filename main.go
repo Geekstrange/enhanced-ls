@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"math"
@@ -83,6 +84,10 @@ var (
 	extTypeMap map[string]FileType
 
 	ansiReset = "\033[0m"
+
+	// version can be overridden at build time:
+	// go build -ldflags "-X main.version=v1.2.3"
+	version = "v0.1.7"
 	colorMap  = map[FileType]string{
 		FileTypeDirectory:    "\033[94m",
 		FileTypeExecutable:   "\033[32m",
@@ -142,7 +147,7 @@ func init() {
 // ─────────────────────────────────────────────
 
 type LSArgs struct {
-	Path         string
+	Paths        []string
 	LongFormat   bool
 	ShowFileType bool
 	SetColor     bool
@@ -154,6 +159,11 @@ type LSArgs struct {
 	Recursive    bool
 	ShowAll      bool // -a: show hidden (dot) files
 	SingleColumn bool // -1: one entry per line
+	SortByTime   bool // -t: sort by modification time, newest first
+	DirItself    bool // -d: list the directory itself, not its contents
+	Reverse      bool // --reverse: reverse the sort order
+	JsonOutput   bool // --json: emit machine-readable JSON
+	ShowVersion  bool // --version
 }
 
 type FileInfoEx struct {
@@ -162,6 +172,26 @@ type FileInfoEx struct {
 	Links     uint64
 	OwnerName string
 	GroupName string
+}
+
+// jsonEntry is the machine-readable representation of a single entry for
+// --json output. Values are raw (bytes, RFC3339 timestamps), never formatted
+// strings, so consumers can rely on them.
+type jsonEntry struct {
+	Name          string      `json:"name"`
+	Path          string      `json:"path"`
+	Size          int64       `json:"size"`
+	TotalSize     *int64      `json:"total_size,omitempty"` // recursive size for directories
+	Modified      time.Time   `json:"modified"`
+	Mode          string      `json:"mode"`
+	Links         uint64      `json:"links"`
+	Owner         string      `json:"owner"`
+	Group         string      `json:"group"`
+	IsDir         bool        `json:"is_dir"`
+	IsSymlink     bool        `json:"is_symlink"`
+	FileType      string      `json:"file_type"`
+	SymlinkTarget string      `json:"symlink_target,omitempty"`
+	Children      []jsonEntry `json:"children,omitempty"` // only in -r tree mode
 }
 
 // ─────────────────────────────────────────────
@@ -271,7 +301,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.1.6 (Gather. Gauge. Grounded.)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.1.7 (Harmonize. Honor. Handle.)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
 	reset := ansiReset
@@ -292,8 +322,13 @@ func getHelpText() string {
     %s-r%s        recursively list subdirectories (tree view).
     %s-s%s        search files (case-insensitive).
     %s-S%s        search files (case-sensitive).
-    %s-h%s        display this help message.
     %s-1%s        display entries one per line (single column).
+    %s-t%s        sort by modification time (newest first).
+    %s-d%s        list the directory itself, not its contents.
+    %s--json%s    output machine-readable JSON (no colors).
+    %s--reverse%s reverse the sort order.
+    %s--version%s print the version and exit.
+    %s--help%s    display this help message.
 
 %sFile Type Indicators:%s
     %s/%s         Directory
@@ -328,8 +363,13 @@ func getHelpText() string {
 		green, reset,
 		green, reset,
 		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
+		green, reset,
 		cyan, reset,
-		blue, reset,
 		blue, reset,
 		blue, reset,
 		blue, reset,
@@ -356,17 +396,38 @@ func getHelpText() string {
 // ─────────────────────────────────────────────
 
 func parseArgs(args []string) (*LSArgs, error) {
-	lsArgs := &LSArgs{Path: "."}
+	lsArgs := &LSArgs{}
 
-	validOptions := "faclrSsSh1"
+	validOptions := "faclrSsS1td"
 
 	i := 0
 	for i < len(args) {
 		arg := args[i]
 
-		if arg == "-h" {
-			lsArgs.ShowHelp = true
-			return lsArgs, nil
+		// Long options.
+		if strings.HasPrefix(arg, "--") {
+			switch arg {
+			case "--json":
+				lsArgs.JsonOutput = true
+			case "--reverse":
+				lsArgs.Reverse = true
+			case "--version":
+				lsArgs.ShowVersion = true
+				return lsArgs, nil
+			case "--help":
+				lsArgs.ShowHelp = true
+				return lsArgs, nil
+			case "--":
+				// Everything after -- is a path, allowing names that start
+				// with a dash.
+				lsArgs.Paths = append(lsArgs.Paths, args[i+1:]...)
+				i = len(args)
+				continue
+			default:
+				return lsArgs, fmt.Errorf("invalid option: %s", arg)
+			}
+			i++
+			continue
 		}
 
 		if strings.HasPrefix(arg, "-") {
@@ -377,8 +438,7 @@ func parseArgs(args []string) (*LSArgs, error) {
 
 			for _, r := range options {
 				if !strings.ContainsRune(validOptions, r) {
-					lsArgs.ShowHelp = true
-					return lsArgs, nil
+					return nil, fmt.Errorf("invalid option: -%c", r)
 				}
 			}
 
@@ -423,18 +483,22 @@ func parseArgs(args []string) (*LSArgs, error) {
 						lsArgs.ShowAll = true
 					case '1':
 						lsArgs.SingleColumn = true
+					case 't':
+						lsArgs.SortByTime = true
+					case 'd':
+						lsArgs.DirItself = true
 					}
 				}
 			}
 		} else {
-			// Positional path argument.
-			if lsArgs.Path == "." {
-				lsArgs.Path = arg
-			} else {
-				fmt.Fprintf(os.Stderr, "Warning: multiple paths not supported, using first path: %s\n", lsArgs.Path)
-			}
+			// Positional path argument; multiple paths are supported.
+			lsArgs.Paths = append(lsArgs.Paths, arg)
 		}
 		i++
+	}
+
+	if len(lsArgs.Paths) == 0 {
+		lsArgs.Paths = []string{"."}
 	}
 
 	return lsArgs, nil
@@ -585,6 +649,11 @@ func displayTree(path string, args *LSArgs, prefix string, depth int) {
 	sort.Slice(visible, func(i, j int) bool {
 		return strings.ToLower(visible[i].Name()) < strings.ToLower(visible[j].Name())
 	})
+	if args.Reverse {
+		for i, j := 0, len(visible)-1; i < j; i, j = i+1, j-1 {
+			visible[i], visible[j] = visible[j], visible[i]
+		}
+	}
 
 	canColor := !isOutputRedirected()
 	colorize := func(s string) string {
@@ -756,6 +825,150 @@ func dirSize(dir string) int64 {
 		}
 	}
 	return total
+}
+
+// ─────────────────────────────────────────────
+// JSON output
+// ─────────────────────────────────────────────
+
+func fileTypeString(ft FileType) string {
+	switch ft {
+	case FileTypeDirectory:
+		return "directory"
+	case FileTypeExecutable:
+		return "executable"
+	case FileTypeSymbolicLink:
+		return "symlink"
+	case FileTypeArchive:
+		return "archive"
+	case FileTypeMedia:
+		return "media"
+	case FileTypeBackup:
+		return "backup"
+	default:
+		return "other"
+	}
+}
+
+// jsonEntryFromInfo builds a jsonEntry for a path/info pair. TotalSize and
+// SymlinkTarget are filled when applicable; Children are filled by callers
+// that recurse (tree mode).
+func jsonEntryFromInfo(path string, info fs.FileInfo) jsonEntry {
+	e := jsonEntry{
+		Name:      info.Name(),
+		Path:      path,
+		Size:      info.Size(),
+		Modified:  info.ModTime(),
+		Mode:      info.Mode().String(),
+		Links:     getLinkCount(info),
+		IsDir:     info.IsDir(),
+		IsSymlink: info.Mode()&os.ModeSymlink != 0,
+		FileType:  fileTypeString(getFileType(info, path)),
+	}
+	e.Owner, e.Group = getFileOwnerGroup(info)
+	if e.IsDir {
+		ts := dirSize(path)
+		e.TotalSize = &ts
+	}
+	if e.IsSymlink {
+		if target, err := os.Readlink(path); err == nil {
+			e.SymlinkTarget = target
+		}
+	}
+	return e
+}
+
+// displayJSON prints a flat listing as an indented JSON array. Color,
+// hyperlinks and the table layout are never applied here.
+func displayJSON(items []FileInfoEx, args *LSArgs) {
+	entries := make([]jsonEntry, len(items))
+	for i, item := range items {
+		entries[i] = jsonEntryFromInfo(item.Path, item.FileInfo)
+	}
+	out, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return
+	}
+	fmt.Println(string(out))
+}
+
+// buildJSONTreeEntries returns the recursive children of a directory as
+// nested jsonEntry values, applying the same filtering and sorting rules as
+// displayTree (hidden files, search/filter terms, case-insensitive names).
+func buildJSONTreeEntries(dir string, args *LSArgs) []jsonEntry {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+
+	var visible []fs.DirEntry
+	for _, entry := range entries {
+		if !args.ShowAll && strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		visible = append(visible, entry)
+	}
+
+	sort.Slice(visible, func(i, j int) bool {
+		return strings.ToLower(visible[i].Name()) < strings.ToLower(visible[j].Name())
+	})
+	if args.Reverse {
+		for i, j := 0, len(visible)-1; i < j; i, j = i+1, j-1 {
+			visible[i], visible[j] = visible[j], visible[i]
+		}
+	}
+
+	var out []jsonEntry
+	for _, entry := range visible {
+		fullPath := filepath.Join(dir, entry.Name())
+
+		var info fs.FileInfo
+		if entry.Type()&os.ModeSymlink != 0 {
+			info, err = os.Lstat(fullPath)
+		} else {
+			info, err = entry.Info()
+		}
+		if err != nil {
+			continue
+		}
+
+		fileType := getFileType(info, fullPath)
+		if !passesFilter(entry.Name(), fileType, args) {
+			continue
+		}
+
+		e := jsonEntryFromInfo(fullPath, info)
+		if e.IsDir {
+			e.Children = buildJSONTreeEntries(fullPath, args)
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// makeFileInfoEx wraps a FileInfo with the path, link count and resolved
+// owner/group names used by the table and JSON renderers.
+func makeFileInfoEx(info fs.FileInfo, path string) FileInfoEx {
+	owner, group := getFileOwnerGroup(info)
+	return FileInfoEx{
+		FileInfo:  info,
+		Path:      path,
+		Links:     getLinkCount(info),
+		OwnerName: owner,
+		GroupName: group,
+	}
+}
+
+// appendPathItem Lstats path (so symlinks stay symlinks) and appends it as a
+// single item. Returns false when the path cannot be accessed.
+func appendPathItem(items *[]FileInfoEx, path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error accessing path: %v\n", err)
+		return false
+	}
+	*items = append(*items, makeFileInfoEx(info, path))
+	return true
 }
 
 // ─────────────────────────────────────────────
@@ -1003,6 +1216,12 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 	}
 	header := "│" + headerGreen + strings.Join(headerFields, headerReset+"│"+headerGreen) + headerReset + "│"
 
+	// Standard ls "total N" line: on-disk usage in 1K blocks.
+	total := int64(0)
+	for _, item := range items {
+		total += int64(getBlockCount(item.FileInfo))
+	}
+	fmt.Printf("total %d\n", total)
 	fmt.Println(topLine)
 	fmt.Println(header)
 	fmt.Println(divider)
@@ -1066,106 +1285,175 @@ func main() {
 		return
 	}
 
+	if args.ShowVersion {
+		fmt.Printf("enls %s\n", version)
+		return
+	}
+
 	// filepath.Clean already normalises separators on every platform,
 	// including Windows — do NOT do an additional ReplaceAll here as it
 	// would corrupt UNC paths (\\server\share).
-	args.Path = filepath.Clean(args.Path)
 
-	fileInfo, err := os.Stat(args.Path)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error accessing path: %v\n", err)
-		os.Exit(1)
+	// Resolve every path argument, expanding glob patterns that were not
+	// expanded by the shell (e.g. quoted patterns or agent invocations).
+	var resolved []string
+	resolveFailed := false
+	for _, p := range args.Paths {
+		p = filepath.Clean(p)
+		if _, err := os.Stat(p); err != nil && strings.ContainsAny(p, "*?[") {
+			matches, gerr := filepath.Glob(p)
+			if gerr == nil && len(matches) > 0 {
+				resolved = append(resolved, matches...)
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "Error accessing path: %v\n", err)
+			resolveFailed = true
+			continue
+		}
+		resolved = append(resolved, p)
 	}
 
 	// ── Recursive / tree mode ──────────────────────────────────────────
-	if args.Recursive {
-		rootName := fileInfo.Name()
-		rootType := getFileType(fileInfo, args.Path)
-
-		// Always print the root directory header.
-		var rootDisplay string
-		if !isOutputRedirected() && args.SetColor {
-			rootDisplay = colorMap[rootType] + rootName + ansiReset
-		} else {
-			rootDisplay = rootName
+	if args.Recursive && !args.DirItself {
+		if args.JsonOutput {
+			// Nested JSON tree: one root entry per path, children recurse.
+			var roots []jsonEntry
+			for _, p := range resolved {
+				info, err := os.Stat(p)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error accessing path: %v\n", err)
+					continue
+				}
+				root := jsonEntryFromInfo(p, info)
+				if passesFilter(info.Name(), getFileType(info, p), args) {
+					root.Children = buildJSONTreeEntries(p, args)
+				}
+				roots = append(roots, root)
+			}
+			out, err := json.MarshalIndent(roots, "", "  ")
+			if err == nil {
+				fmt.Println(string(out))
+			}
+			return
 		}
-		if args.ShowFileType {
-			rootDisplay += typeIndicators[rootType]
-		}
-		fmt.Println(rootDisplay)
 
-		// Only recurse into it when it passes the filter (or there is no
-		// filter, meaning all roots are valid).
-		if passesFilter(rootName, rootType, args) {
-			displayTree(args.Path, args, "", 0)
+		for _, p := range resolved {
+			info, err := os.Stat(p)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error accessing path: %v\n", err)
+				continue
+			}
+			rootName := info.Name()
+			rootType := getFileType(info, p)
+
+			// Always print the root directory header.
+			var rootDisplay string
+			if !isOutputRedirected() && args.SetColor {
+				rootDisplay = colorMap[rootType] + rootName + ansiReset
+			} else {
+				rootDisplay = rootName
+			}
+			if args.ShowFileType {
+				rootDisplay += typeIndicators[rootType]
+			}
+			fmt.Println(rootDisplay)
+
+			// Only recurse into it when it passes the filter (or there is no
+			// filter, meaning all roots are valid).
+			if passesFilter(rootName, rootType, args) {
+				displayTree(p, args, "", 0)
+			}
 		}
 		return
 	}
 
 	// ── Non-recursive mode ────────────────────────────────────────────
 	var items []FileInfoEx
+	hadError := resolveFailed
 
-	if fileInfo.IsDir() {
-		entries, err := os.ReadDir(args.Path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading directory: %v\n", err)
-			os.Exit(1)
+	for _, p := range resolved {
+		if args.DirItself {
+			// -d: list the directory (or file) itself, not its contents.
+			if !appendPathItem(&items, p) {
+				hadError = true
+			}
+			continue
 		}
 
-		for _, entry := range entries {
-			// Hidden-file filtering.
-			if !args.ShowAll && strings.HasPrefix(entry.Name(), ".") {
-				continue
-			}
+		info, err := os.Stat(p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error accessing path: %v\n", err)
+			hadError = true
+			continue
+		}
 
-			fullPath := filepath.Join(args.Path, entry.Name())
-
-			// Use DirEntry.Info() to avoid an extra syscall; Lstat only for symlinks.
-			var info fs.FileInfo
-			if entry.Type()&os.ModeSymlink != 0 {
-				info, err = os.Lstat(fullPath)
-			} else {
-				info, err = entry.Info()
-			}
+		if info.IsDir() {
+			entries, err := os.ReadDir(p)
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading directory: %v\n", err)
+				hadError = true
 				continue
 			}
 
-			fileType := getFileType(info, fullPath)
-			if !passesFilter(entry.Name(), fileType, args) {
-				continue
-			}
+			for _, entry := range entries {
+				// Hidden-file filtering.
+				if !args.ShowAll && strings.HasPrefix(entry.Name(), ".") {
+					continue
+				}
 
-			owner, group := getFileOwnerGroup(info)
-			items = append(items, FileInfoEx{
-				FileInfo:  info,
-				Path:      fullPath,
-				Links:     getLinkCount(info),
-				OwnerName: owner,
-				GroupName: group,
-			})
+				fullPath := filepath.Join(p, entry.Name())
+
+				// Use DirEntry.Info() to avoid an extra syscall; Lstat only for symlinks.
+				var info fs.FileInfo
+				if entry.Type()&os.ModeSymlink != 0 {
+					info, err = os.Lstat(fullPath)
+				} else {
+					info, err = entry.Info()
+				}
+				if err != nil {
+					continue
+				}
+
+				fileType := getFileType(info, fullPath)
+				if !passesFilter(entry.Name(), fileType, args) {
+					continue
+				}
+
+				items = append(items, makeFileInfoEx(info, fullPath))
+			}
+		} else {
+			// Direct file argument.
+			if !appendPathItem(&items, p) {
+				hadError = true
+			}
 		}
-	} else {
-		// Single-file argument.
-		info, err := os.Lstat(args.Path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error accessing file: %v\n", err)
-			os.Exit(1)
-		}
-		owner, group := getFileOwnerGroup(info)
-		items = append(items, FileInfoEx{
-			FileInfo:  info,
-			Path:      args.Path,
-			Links:     getLinkCount(info),
-			OwnerName: owner,
-			GroupName: group,
-		})
 	}
 
-	// Sort entries unconditionally in a case-insensitive manner to emulate standard `ls` sorting.
+	if len(items) == 0 && hadError {
+		os.Exit(1)
+	}
+
+	// Emulate standard `ls` sorting: case-insensitive by name; -t sorts by
+	// modification time (newest first) with name as the tiebreaker.
 	sort.Slice(items, func(i, j int) bool {
+		if args.SortByTime {
+			ti, tj := items[i].ModTime(), items[j].ModTime()
+			if !ti.Equal(tj) {
+				return ti.After(tj)
+			}
+		}
 		return strings.ToLower(items[i].Name()) < strings.ToLower(items[j].Name())
 	})
+	if args.Reverse {
+		for i, j := 0, len(items)-1; i < j; i, j = i+1, j-1 {
+			items[i], items[j] = items[j], items[i]
+		}
+	}
+
+	if args.JsonOutput {
+		displayJSON(items, args)
+		return
+	}
 
 	if args.LongFormat {
 		displayLongFormat(items, args)
