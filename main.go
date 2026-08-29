@@ -153,6 +153,7 @@ type LSArgs struct {
 	FilterType   string
 	Recursive    bool
 	ShowAll      bool // -a: show hidden (dot) files
+	SingleColumn bool // -1: one entry per line
 }
 
 type FileInfoEx struct {
@@ -270,7 +271,7 @@ func createHyperlink(text, url string) string {
 func getHelpText() string {
 	startRGB := [3]int{0, 150, 255}
 	endRGB := [3]int{50, 255, 50}
-	gradientTitle := addGradient("Enhanced-ls v0.1.5 (Cross-Platform)", startRGB, endRGB)
+	gradientTitle := addGradient("Enhanced-ls v0.1.6 (Gather. Gauge. Grounded.)", startRGB, endRGB)
 	link := createHyperlink(gradientTitle, "https://github.com/Geekstrange/enhanced-ls")
 
 	reset := ansiReset
@@ -292,6 +293,7 @@ func getHelpText() string {
     %s-s%s        search files (case-insensitive).
     %s-S%s        search files (case-sensitive).
     %s-h%s        display this help message.
+    %s-1%s        display entries one per line (single column).
 
 %sFile Type Indicators:%s
     %s/%s         Directory
@@ -317,6 +319,7 @@ func getHelpText() string {
 `,
 		link,
 		cyan, reset,
+		green, reset,
 		green, reset,
 		green, reset,
 		green, reset,
@@ -355,7 +358,7 @@ func getHelpText() string {
 func parseArgs(args []string) (*LSArgs, error) {
 	lsArgs := &LSArgs{Path: "."}
 
-	validOptions := "faclrSsSh"
+	validOptions := "faclrSsSh1"
 
 	i := 0
 	for i < len(args) {
@@ -418,6 +421,8 @@ func parseArgs(args []string) (*LSArgs, error) {
 						lsArgs.Recursive = true
 					case 'a':
 						lsArgs.ShowAll = true
+					case '1':
+						lsArgs.SingleColumn = true
 					}
 				}
 			}
@@ -699,64 +704,58 @@ func minInt(a, b int) int {
 // File metadata helpers
 // ─────────────────────────────────────────────
 
-func formatRelativeTime(t time.Time) string {
+// formatModTime renders the modification time like standard ls: time-of-day
+// for entries modified within the last 6 months, the year for older ones.
+func formatModTime(t time.Time) string {
 	now := time.Now()
-	d := now.Sub(t)
-	if d < 0 {
-		d = -d
+	if t.After(now.Add(-6*30*24*time.Hour)) && !t.After(now) {
+		return t.Format("Jan _2 15:04")
 	}
-
-	seconds := int(d.Seconds())
-	minutes := int(d.Minutes())
-	hours := int(d.Hours())
-	days := hours / 24
-	weeks := days / 7
-	months := days / 30
-	years := days / 365
-
-	switch {
-	case seconds < 5:
-		return "now"
-	case seconds < 60:
-		return fmt.Sprintf("%d secs ago", seconds)
-	case minutes == 1:
-		return "a minute ago"
-	case minutes < 60:
-		return fmt.Sprintf("%d minutes ago", minutes)
-	case hours == 1:
-		return "an hour ago"
-	case hours < 24:
-		return fmt.Sprintf("%d hours ago", hours)
-	case days == 1:
-		return "a day ago"
-	case days < 7:
-		return fmt.Sprintf("%d days ago", days)
-	case weeks == 1:
-		return "a week ago"
-	case weeks < 4:
-		return fmt.Sprintf("%d weeks ago", weeks)
-	case months == 1:
-		return "a month ago"
-	case months < 12:
-		return fmt.Sprintf("%d months ago", months)
-	case years == 1:
-		return "a year ago"
-	default:
-		return fmt.Sprintf("%d years ago", years)
-	}
+	return t.Format("Jan _2  2006")
 }
 
 func formatSize(size int64) string {
 	const unit = 1024
 	if size < unit {
-		return fmt.Sprintf("%d", size)
+		return fmt.Sprintf("%dB", size)
 	}
 	div, exp := int64(unit), 0
 	for n := size / unit; n >= unit; n /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f%c", float64(size)/float64(div), "KMGTPE"[exp])
+	// Promote to the next unit when the value rounds up (e.g. 1023.96K -> 1.0M).
+	value := float64(size) / float64(div)
+	if value >= 1023.95 && exp < 5 {
+		div *= unit
+		exp++
+		value = float64(size) / float64(div)
+	}
+	return fmt.Sprintf("%.1f%c", value, "KMGTPE"[exp])
+}
+
+// dirSize returns the total size of all regular files under dir,
+// recursively. Symlinks are not followed, mirroring du's default behavior.
+func dirSize(dir string) int64 {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return 0
+	}
+	var total int64
+	for _, entry := range entries {
+		fullPath := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			total += dirSize(fullPath)
+			continue
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		if info, err := entry.Info(); err == nil {
+			total += info.Size()
+		}
+	}
+	return total
 }
 
 // ─────────────────────────────────────────────
@@ -789,7 +788,14 @@ func displayItems(items []FileInfoEx, args *LSArgs) {
 	}
 
 	windowWidth := getTerminalWidth()
-	rows, _, colWidths := calculateLayout(displayWidths, windowWidth)
+	var rows int
+	var colWidths []int
+	if args.SingleColumn {
+		rows = len(displayWidths)
+		colWidths = []int{maxIntSlice(displayWidths)}
+	} else {
+		rows, _, colWidths = calculateLayout(displayWidths, windowWidth)
+	}
 
 	lines := make([][]string, rows)
 
@@ -899,14 +905,19 @@ func displayLongFormat(items []FileInfoEx, args *LSArgs) {
 		if args.ShowFileType {
 			bn += typeIndicators[ft]
 		}
-		ts := formatRelativeTime(item.ModTime())
+		ts := formatModTime(item.ModTime())
+
+		size := item.Size()
+		if item.IsDir() {
+			size = dirSize(item.Path)
+		}
 
 		rows[i] = rowData{
 			mode:     item.Mode().String(),
 			links:    strconv.FormatUint(item.Links, 10),
 			owner:    item.OwnerName,
 			group:    item.GroupName,
-			size:     formatSize(item.Size()),
+			size:     formatSize(size),
 			timeStr:  ts,
 			baseName: bn,
 			fileType: ft,
