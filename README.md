@@ -1,78 +1,78 @@
 # enhanced-ls
 
-这是一个跨平台的增强版“ls” 命令工具，旨在为用户提供更丰富、更便捷的文件和文件夹列表查看体验
+This is a cross-platform enhanced "ls" command-line tool designed to provide users with a richer and more convenient experience for viewing file and folder listings.
 
-## 功能特点
+## Features
 
-- 🎨 **彩色输出**：目录、可执行文件和符号链接使用不同颜色显示
-- 📝 **文件类型指示符**：在文件名后添加 `/`（目录）、`*`（可执行文件）或 `@`（符号链接）
-- 📊 **多列布局**：自动适应终端宽度进行多列显示
-- 🖥️ **详细模式**：使用 `-l` 选项显示表格布局
-- 📏 **CJK字符支持**：正确处理中文、日文、韩文字符的宽度计算
-- 🚀 **轻量高效**：Golang实现，无需外部依赖
+- 🎨 **Colorized output**: Directories, executables, and symbolic links are displayed in different colors
+- 📝 **File type indicators**: Append `/` (directory), `*` (executable), or `@` (symbolic link) after file names
+- 📊 **Multi-column layout**: Automatically adapts to terminal width for multi-column display
+- 🖥️ **Detailed mode**: Use the `-l` option to display a table layout
+- 📏 **CJK character support**: Correctly handles width calculation for Chinese, Japanese, and Korean characters
+- 🚀 **Lightweight and efficient**: Implemented in Golang with no external dependencies
 
-## 环境要求
+## Requirements
 
-1. 建议使用[PowerShell 7.2+](https://github.com/PowerShell/PowerShell/releases)
-2. 建议使用[Windows Terminal](https://github.com/microsoft/terminal/releases) / [Tabby](https://tabby.sh/) / [Fluent Terminal](https://github.com/felixse/FluentTerminal/releases) 等现代终端
+1. [PowerShell 7.2+](https://github.com/PowerShell/PowerShell/releases) is recommended
+2. Modern terminals such as [Windows Terminal](https://github.com/microsoft/terminal/releases) / [Tabby](https://tabby.sh/) / [Fluent Terminal](https://github.com/felixse/FluentTerminal/releases) are recommended
 
-## 安装
+## Installation
 
-1. 将项目克隆或下载到本地：
+1. Clone or download the project locally:
    ```bash
    git clone https://github.com/Geekstrange/enhanced-ls.git
    ```
 
-2. 在 PowerShell 配置文件 (`$PROFILE`) 中添加以下内容：
+2. Add the following content to your PowerShell profile (`$PROFILE`):
    ```bash
-   # 移除现有的 ls 别名
+   # Remove the existing ls alias
    Remove-Item Alias:ls -ErrorAction SilentlyContinue
 
-   # 设置 ls 别名指向enls.exe
+   # Set the ls alias to enls.exe
    function Invoke-Ls {
-       \path\to\enls.exe -c @args  # @args 表示透传所有参数
+       \path\to\enls.exe -c @args  # @args passes through all arguments
    }
    Set-Alias ls Invoke-Ls
    ```
 
-3. 重新加载配置文件：
+3. Reload the profile:
    ```bash
    .$PROFILE
    ```
 
-## 使用说明
+## Usage
 
-*使用Windows下的PowerShell 7.5+演示*
+*Demonstrated using PowerShell 7.5+ on Windows*
 
-### 基本命令
+### Basic command
 
 ```bash
-ls [路径] [选项]
+ls [path] [options]
 ```
 
-### 选项
+### Options
 
-| 选项       | 描述                         |
+| Option       | Description                         |
 | ---------- | ---------------------------- |
-| `-f`或`-F` | 显示文件类型指示符(`*/@#~%`) **或** 筛选指定类型文件（如`-f "#"`仅显示压缩文件） |
-| `-c`或`-C` | 启用彩色输出                 |
-| `-l`或`-L` | 详细列表模式 |
-| `-s` | 忽略大小写查询 |
-| `-S` | 严格匹配大小写查询 |
-| `-r` | 递归显示 |
-| `-1` | 单列显示（一行一个条目） |
-| `-t` | 按修改时间排序（新的在前） |
-| `-d` | 只列出目录本身（不展开内容） |
-| `--json` | 输出机器可读 JSON（供脚本/agent 使用） |
-| `--reverse` | 反转排序 |
-| `--version` | 显示版本号 |
-| `--help`   | 显示帮助信息                 |
+| `-f` or `-F` | Show file type indicators (`*/@#~%`) **or** filter files of a specified type (e.g., `-f "#"` shows only compressed files) |
+| `-c` or `-C` | Enable colorized output                 |
+| `-l` or `-L` | Detailed list mode |
+| `-s` | Case-insensitive query |
+| `-S` | Strict case-sensitive query |
+| `-r` | Recursive display |
+| `-1` | Single-column display (one entry per line) |
+| `-t` | Sort by modification time (newest first) |
+| `-d` | List only the directories themselves (do not expand contents) |
+| `--json` | Output machine-readable JSON (for scripts/agents) |
+| `--reverse` | Reverse sorting |
+| `--version` | Show version number |
+| `--help`   | Show help information                 |
 
-> 支持多个路径参数和通配符：`enls *.go`、`enls src bin`（shell 未展开的 glob 会由 enls 自行展开）
+> Supports multiple path arguments and wildcards: `enls *.go`, `enls src bin` (globs not expanded by the shell will be expanded by enls itself)
 
-### 示例
+### Examples
 
-1. **基本使用**（多列布局，自动适应终端宽度）：
+1. **Basic usage** (multi-column layout, automatically adapts to terminal width):
 
    ```bash
    ls
@@ -80,7 +80,7 @@ ls [路径] [选项]
 
    ![ls](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/ls.png)
 
-2. **彩色输出**：
+2. **Colorized output**:
 
    ```bash
    ls -c
@@ -88,7 +88,7 @@ ls [路径] [选项]
 
    ![ls-c](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lsc.png)
 
-3. **显示文件类型指示符**：
+3. **Show file type indicators**:
 
    ```bash
    ls -f
@@ -96,22 +96,22 @@ ls [路径] [选项]
 
    ![ls-f](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lsf.png)
 
-5. **组合选项**（彩色+文件类型+表格指示符）：
+5. **Combined options** (color + file type + table indicators):
 
    ```bash
-   ls -c -f -l或ls -cfl
+   ls -c -f -l or ls -cfl
    ```
 
    ![ls-cfl](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lslcf.png)
 
-6. **指定路径**：
+6. **Specify a path**:
 
    ```bash
    ls C:\Users
    ls -l D:\Projects
    ```
 
-7. **递归显示**
+7. **Recursive display**
 
    ```bash
    ls -s "r"
@@ -119,7 +119,7 @@ ls [路径] [选项]
 
    ![ls-r](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lsr.png)
 
-8. **严格匹配大小写查询**
+8. **Strict case-sensitive query**
 
    ```bash
    ls -S "R" -l
@@ -127,11 +127,11 @@ ls [路径] [选项]
 
    ![ls-S-l](https://github.com/Geekstrange/enhanced-ls-for-powershell/blob/main/image/lssl.png)
 
-## 版本选择指南
+## Version Selection Guide
 
-根据您的操作系统和架构，请选择对应的安装文件以下是不同平台的版本对应关系：
+Choose the corresponding installation file based on your operating system and architecture. The following table shows the version mapping for different platforms:
 
-| **操作系统** | **架构**              | **文件名**                      |
+| **Operating System** | **Architecture**              | **File Name**                      |
 | :----------- | :-------------------- | :------------------------------ |
 | **Windows**  | x86_64/AMD64          | `enls-vx.x.x-windows_amd64.exe` |
 |              | ARM64/AArch64         | `enls-vx.x.x-windows_arm64.exe` |
@@ -141,56 +141,56 @@ ls [路径] [选项]
 | **macOS**    | Intel (x86_64/AMD64)        | `enls-vx.x.x-darwin_amd64`      |
 |              | Apple Silicon (ARM64/AArch64) | `enls-vx.x.x-darwin_arm64`      |
 
-## 如何确定我的系统架构
+## How to Determine My System Architecture
 
-### Windows 系统
+### Windows
 
-1. **打开命令提示符**：可以通过在开始菜单中搜索“cmd”或“命令提示符”来打开
+1. **Open Command Prompt**: You can open it by searching for "cmd" or "Command Prompt" in the Start menu
 
-2. **输入命令**：在命令提示符中输入以下命令并按回车键：
+2. **Enter the command**: Type the following command in Command Prompt and press Enter:
 
    ```cmd
    wmic os get osarchitecture
    ```
 
-3. **查看输出结果**：
+3. **Check the output**:
 
-   - 如果显示“64-bit”，则您的系统是 **64位 (x86_64)**
-   - 如果显示“ARM64”，则您的系统是 **ARM64**
+   - If it shows "64-bit", your system is **64-bit (x86_64)**
+   - If it shows "ARM64", your system is **ARM64**
 
-### Linux 系统
+### Linux
 
-1. **打开终端**：可以通过在应用程序菜单中搜索“终端”或使用快捷键（通常是`Ctrl+Alt+T`）来打开
+1. **Open Terminal**: You can open it by searching for "Terminal" in the application menu or using the shortcut (usually `Ctrl+Alt+T`)
 
-2. **输入命令**：在终端中输入以下命令并按回车键：
+2. **Enter the command**: Type the following command in the terminal and press Enter:
 
    ```bash
    uname -m
    ```
 
-3. **查看输出结果**：
+3. **Check the output**:
 
-   - 如果显示`x86_64`，则您的系统是 **64位 (x86_64)**
-   - 如果显示`aarch64`，则您的系统是 **ARM64**
+   - If it shows `x86_64`, your system is **64-bit (x86_64)**
+   - If it shows `aarch64`, your system is **ARM64**
 
-### macOS 系统
+### macOS
 
-1. **打开终端**：可以通过在应用程序菜单中搜索“终端”来打开
+1. **Open Terminal**: You can open it by searching for "Terminal"
 
-2. **输入命令**：在终端中输入以下命令并按回车键：
+2. **Enter the command**: Type the following command in the terminal and press Enter:
 
    ```zsh
    uname -m
    ```
 
-3. **查看输出结果**：
+3. **Check the output**:
 
-   - 如果显示`x86_64`，则您的系统是 **Intel (x86_64)**
-   - 如果显示`arm64`，则您的系统是 **Apple Silicon (ARM64)**
+   - If it shows `x86_64`, your system is **Intel (x86_64)**
+   - If it shows `arm64`, your system is **Apple Silicon (ARM64)**
 
 
-## 许可证
+## License
 
-本项目采用 [MIT 许可证](LICENSE)
+This project is licensed under the [MIT License](LICENSE).
 
 ---
