@@ -1,0 +1,68 @@
+name: ✨ Feature Request
+description: Suggest an option, flag, or improvement for enhanced-ls.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion! ✨
+
+        - 🔎 Search [existing issues](https://github.com/Geekstrange/enhanced-ls/issues) first.
+        - 🔒 Security issues are not feature requests — report them privately instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What limitation are you hitting?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: New flag, output format, or behavior. Include example usage.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Listing / layout
+        - Color / theme
+        - File type indicators
+        - Detailed (-l) mode
+        - Sorting / filtering
+        - JSON output
+        - Cross-platform behavior
+        - Performance
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true

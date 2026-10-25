@@ -1,0 +1,149 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug in enhanced-ls (enls).
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! 🐛
+
+        **Before you submit:**
+        - 🔎 Search [existing issues](https://github.com/Geekstrange/enhanced-ls/issues) to avoid duplicates.
+        - 🖥️ enhanced-ls is cross-platform (Windows / Linux / macOS). Please state your OS, architecture, shell, and terminal.
+        - 🔒 **Do NOT report security vulnerabilities here.** Use private reporting instead (see the contact links).
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug summary
+      description: A clear and concise description of the bug.
+      placeholder: 'e.g. "CJK filenames misalign the multi-column layout"'
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Listing / multi-column layout
+        - Colorized output (-c)
+        - File type indicators (-f)
+        - Detailed mode (-l)
+        - CJK / Unicode width
+        - Sorting (-t / --reverse)
+        - Filtering (-f TYPE)
+        - Recursive display (-r)
+        - Single-column (-1)
+        - JSON output (--json)
+        - Path / wildcard handling
+        - Build / installation
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: enls version
+      description: Output of `enls --version`.
+      placeholder: "v0.1.7"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options:
+        - amd64 (x86_64)
+        - arm64 (AArch64)
+        - loong64 (LoongArch)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: shell_terminal
+    attributes:
+      label: Shell / terminal
+      description: Which shell and terminal are you using?
+      placeholder: "PowerShell 7.5, Windows Terminal 1.21"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact command(s), path(s), or a minimal directory layout.
+      placeholder: |
+        1. Run `enls -c -l`
+        2. ...
+        3. Observe ...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the exact output and any error message.
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output / screenshots
+      description: Paste the exact output. `enls --json` is often the most useful, reproducible form.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: go_version
+    attributes:
+      label: Go version (only if built from source)
+      placeholder: "go 1.24.4"
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I confirm this is NOT a security vulnerability (report those privately instead).
+          required: true

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability (private)
+    url: https://github.com/Geekstrange/enhanced-ls/security/advisories/new
+    about: Do NOT open a public issue for security vulnerabilities. Report privately.
+  - name: 📖 Documentation & README
+    url: https://github.com/Geekstrange/enhanced-ls#readme
+    about: Please read the README (usage, options, platform matrix) before filing.
